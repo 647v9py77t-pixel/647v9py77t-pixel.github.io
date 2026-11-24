@@ -14,6 +14,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
 <title>Transpositor</title>
+<script>window.APP_VERSAO = '20261124120610';</script>
 <style>
 :root{--azul:#1f3a5f;--ouro:#f2c14e;--fundo:#f4f1ea;--card:#fff;--txt:#1d1d1f;--sub:#6b6b70;--borda:#e2ddd2;--verm:#c0392b;--b2:#e7e2d6;--b2txt:#1f3a5f;--campo:#fff;--pre:#faf8f3;--h2:#1f3a5f;
   --seta:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%236b6b70' stroke-width='2'/%3E%3C/svg%3E")}
@@ -125,6 +126,7 @@ body.so-pane .cfg,body.so-pane #res{display:none!important}
 .legenda{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;margin:2px 0 8px}
 .lg::before{content:"";display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:-1px}
 .lg.ok::before{background:#1e8449}.lg.am::before{background:#d68910}.lg.er::before{background:#c0392b}
+.versao{text-align:center;font-size:11px;color:var(--sub);margin:4px 0 12px}
 /* Aquecimento */
 .aq-passo{border-bottom:1px dashed var(--borda);padding-bottom:10px;margin-bottom:6px}
 .aq-tit3{margin-top:12px!important}
@@ -303,6 +305,7 @@ Aquilo que fui não sou mais,"></textarea>
     </div>
   </section>
 
+  <p class="versao" id="versao"></p>
   <section class="card" id="res" hidden>
     <h2>Resultado</h2>
     <div id="fonte"></div>
@@ -2661,6 +2664,44 @@ window.addEventListener('DOMContentLoaded', () => {
   listar();
 });
 window.bibAnaliseLivre = analiseLivre; // para testes
+})();
+</script>
+<script>// ===== Atualização automática =====
+// O link é sempre o mesmo. Ao abrir (e ao voltar para o app), compara a versão embutida com a do site;
+// se o site tiver uma mais nova, recarrega sozinho. O service worker (sw.js) busca sempre a versão da
+// internet e só usa a cópia guardada quando está sem rede.
+(() => {
+  const local = window.APP_VERSAO || '';
+  const fmt = v => /^\d{14}$/.test(v) ? `${v.slice(6, 8)}/${v.slice(4, 6)}/${v.slice(0, 4)} ${v.slice(8, 10)}:${v.slice(10, 12)}` : v;
+  const online = /^https?:$/.test(location.protocol);
+  if (online && 'serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  let checando = false;
+  async function checar() {
+    if (!online || checando || !navigator.onLine) return;
+    // não recarrega no meio de uma gravação, playback ou com o leitor aberto
+    if (document.querySelector('.ativo') || document.body.classList.contains('leitor-aberto')) return;
+    checando = true;
+    try {
+      const r = await fetch(location.pathname + '?v=' + Date.now(), { cache: 'no-store' });
+      const m = (await r.text()).match(/APP_VERSAO = '(\d{14})'/);
+      const remota = m && m[1];
+      if (remota && remota > local) {
+        const k = 'tp_upd_' + remota, n = +(sessionStorage.getItem(k) || 0);
+        if (n < 2) {
+          sessionStorage.setItem(k, n + 1);
+          const t = document.getElementById('toast'); if (t) { t.textContent = 'Atualizando para a versão nova…'; t.classList.add('on'); }
+          setTimeout(() => location.reload(), 700);
+        }
+      }
+    } catch (e) {}
+    checando = false;
+  }
+  window.addEventListener('DOMContentLoaded', () => {
+    const v = document.getElementById('versao'); if (v) v.textContent = 'Versão ' + fmt(local);
+    setTimeout(checar, 1500);
+  });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checar(); });
+  setInterval(checar, 30 * 60 * 1000);
 })();
 </script>
 </body>
