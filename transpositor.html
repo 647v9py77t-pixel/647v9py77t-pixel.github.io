@@ -14,7 +14,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
 <title>Transpositor</title>
-<script>window.APP_VERSAO = '20261124141840';</script>
+<script>window.APP_VERSAO = '20261124152356';</script>
 <style>
 :root{--azul:#1f3a5f;--ouro:#f2c14e;--fundo:#f4f1ea;--card:#fff;--txt:#1d1d1f;--sub:#6b6b70;--borda:#e2ddd2;--verm:#c0392b;--b2:#e7e2d6;--b2txt:#1f3a5f;--campo:#fff;--pre:#faf8f3;--h2:#1f3a5f;
   --seta:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%236b6b70' stroke-width='2'/%3E%3C/svg%3E")}
@@ -156,6 +156,9 @@ body.so-pane .cfg,body.so-pane #res{display:none!important}
 .ac-abrir{flex:1;min-width:0;text-align:left;border:0;background:none;color:var(--txt);font:inherit;font-size:15px;padding:6px 2px;display:flex;flex-direction:column}
 .ac-abrir small{color:var(--sub);font-size:12px}
 .ac-res .mini{margin:0;white-space:nowrap}
+.ac-pasta{border-color:var(--azul);border-style:solid;background:var(--b2)}
+.ac-lembrete{background:#fff0c7;color:#7a5300;border-radius:10px;padding:8px 10px;font-size:14px;margin:6px 0;display:flex;align-items:center;gap:8px}
+.ac-lembrete .mini{margin:0 0 0 auto}
 /* Repertório */
 .rp-item{display:flex;align-items:center;gap:6px;padding:6px 0;border-top:1px solid var(--borda)}
 .rp-n{flex:none;width:24px;height:24px;border-radius:50%;background:var(--azul);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
@@ -273,14 +276,16 @@ body.leitor-aberto{overflow:hidden}
   <section class="card pane" id="p_repert">
     <details class="acervo" id="acervoBox">
       <summary><b>📚 Acervo</b> <small>— suas pastas de partituras e cifras</small></summary>
-      <p class="note" style="margin-top:4px">Traga as pastas do tablet para o app. No Arquivos, entre na pasta → Selecionar → Selecionar tudo, ou compacte a pasta (segure → Comprimir) e escolha o .zip. Para atualizar depois, sincronize de novo: o que já existe é pulado.</p>
+      <p class="note" style="margin-top:4px">Escolha a pasta inteira do tablet (com subpastas). Quando colocar PDFs novos nela, toque em 🔄 e escolha a mesma pasta: o app traz só o que é novo ou mudou. O Safari não deixa o app olhar a pasta sozinho, por isso o toque.</p>
+      <div id="acLembrete"></div>
       <div id="acColecoes"></div>
       <button class="b b2" id="acSincBt" style="width:100%;margin-top:6px">🔄 Sincronizar pasta</button>
       <div id="acSinc" class="rp-cifra" hidden>
         <label>Coleção<select id="acColSel"></select></label>
-        <label id="acNovaNome" hidden style="margin-top:6px">Nome da nova coleção<input type="text" id="acNovaNomeIn" placeholder="ex.: Partituras, Coletâneas cifradas"></label>
+        <label id="acNovaNome" hidden style="margin-top:6px">Nome da nova coleção<input type="text" id="acNovaNomeIn" placeholder="vazio = usa o nome da pasta"></label>
         <label class="chk"><input type="checkbox" id="acRemover"> Tirar do app o que não estiver mais na pasta</label>
-        <label class="file">📂 Escolher os arquivos da pasta ou o .zip<input type="file" id="acArq" multiple accept=".pdf,.txt,.zip,.cho,.chopro,.chordpro,application/pdf,application/zip,text/plain"></label>
+        <label class="file ac-pasta" id="acPastaLbl">📁 Escolher a PASTA inteira<input type="file" id="acPasta" webkitdirectory directory multiple></label>
+        <label class="file">📂 Ou escolher arquivos soltos / um .zip<input type="file" id="acArq" multiple accept=".pdf,.txt,.zip,.cho,.chopro,.chordpro,application/pdf,application/zip,text/plain"></label>
         <button class="b b2 mini" id="acCancelar" style="margin-top:6px">Cancelar</button>
       </div>
       <div id="acStatus" class="est-status"></div>
@@ -3035,13 +3040,30 @@ async function dadosPdf(x) {
 const AC = { meta: [] };
 const normal = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const EXT_TEXTO = /\.(txt|cho|chopro|chordpro|crd)$/i;
-async function acCarregar() { try { AC.meta = await idbAll('acervo'); } catch (e) { AC.meta = []; } acDesenhar(); }
+async function acCarregar() {
+  try { AC.meta = await idbAll('acervo'); } catch (e) { AC.meta = []; }
+  AC.sinc = {};
+  try { const ks = await tx('meta', 'readonly', st => st.getAllKeys()); for (const k of ks || []) if (String(k).startsWith('sinc:')) AC.sinc[String(k).slice(5)] = await idbGet('meta', k); } catch (e) {}
+  acDesenhar();
+}
+function haQuanto(ts) {
+  if (!ts) return 'nunca';
+  const d = Math.floor((Date.now() - ts) / 86400000);
+  return d <= 0 ? 'hoje' : d === 1 ? 'ontem' : `há ${d} dias`;
+}
 function acDesenhar() {
   const box = $('acColecoes'); if (!box) return;
   const col = {};
   AC.meta.forEach(m => { const c = col[m.colecao] || (col[m.colecao] = { n: 0, tam: 0 }); c.n++; c.tam += m.tam || 0; });
   const nomes = Object.keys(col).sort((a, b) => a.localeCompare(b, 'pt'));
-  box.innerHTML = nomes.length ? nomes.map(c => `<div class="bib-item"><div class="ac-col"><b>🗂️ ${esc(c)}</b><small>${col[c].n} arquivos · ${(col[c].tam / 1048576).toFixed(0)} MB</small></div>
+  // lembrete: alguma coleção sem sincronizar há mais de 7 dias
+  const velhas = nomes.filter(c => !AC.sinc[c] || Date.now() - AC.sinc[c] > 7 * 86400000);
+  const lem = $('acLembrete');
+  if (lem) {
+    lem.innerHTML = velhas.length ? `<div class="ac-lembrete">🔔 ${velhas.length === 1 ? `"${esc(velhas[0])}" não é sincronizada ${haQuanto(AC.sinc[velhas[0]])}` : `${velhas.length} coleções sem sincronizar há mais de 7 dias`}. Colocou PDFs novos?<button class="b b2 mini" data-lem>🔄 Sincronizar</button></div>` : '';
+    const b = lem.querySelector('[data-lem]'); if (b) b.onclick = () => { $('acervoBox').open = true; acAbrirSinc(velhas[0]); };
+  }
+  box.innerHTML = nomes.length ? nomes.map(c => `<div class="bib-item"><div class="ac-col"><b>🗂️ ${esc(c)}</b><small>${col[c].n} arquivos · ${(col[c].tam / 1048576).toFixed(0)} MB · sincronizada ${haQuanto(AC.sinc[c])}</small></div>
       <button class="b b2 mini" data-sinc="${esc(c)}" title="Sincronizar de novo">🔄</button><button class="b b2 mini" data-delc="${esc(c)}" title="Tirar do app">🗑</button></div>`).join('')
     : '<p class="note">Nenhuma pasta ainda. Toque em "Sincronizar pasta" e escolha os arquivos da pasta (Selecionar → Selecionar tudo) ou a pasta compactada (.zip).</p>';
   box.querySelectorAll('[data-sinc]').forEach(b => b.onclick = () => acAbrirSinc(b.dataset.sinc));
@@ -3070,7 +3092,13 @@ async function acEntradas(files) {
         const partes = caminho.split('/'); if (partes.length > 1) partes.shift();
         out.push({ nome: partes.join('/'), tam: e._data && e._data.uncompressedSize || 0, mod: +e.date || 0, ler: () => e.async('arraybuffer') });
       });
-    } else if (/\.pdf$/i.test(f.name) || EXT_TEXTO.test(f.name)) out.push({ nome: f.name, tam: f.size, mod: f.lastModified || 0, ler: () => f.arrayBuffer() });
+    } else if (/\.pdf$/i.test(f.name) || EXT_TEXTO.test(f.name)) {
+      // pasta inteira: webkitRelativePath = "Pasta/Sub/arquivo.pdf" → guarda "Sub/arquivo.pdf"
+      const rel = f.webkitRelativePath || '';
+      const partes = rel ? rel.split('/') : [f.name]; if (partes.length > 1) partes.shift();
+      if (partes.some(p => p.startsWith('.') || p === '__MACOSX')) continue;
+      out.push({ nome: partes.join('/'), tam: f.size, mod: f.lastModified || 0, ler: () => f.arrayBuffer() });
+    }
   }
   return out;
 }
@@ -3078,12 +3106,15 @@ function textoDe(buf) {
   const u = new TextDecoder('utf-8').decode(buf);
   return u.includes('�') ? new TextDecoder('windows-1252').decode(buf) : u;
 }
-async function acSincronizar() {
+async function acSincronizar(ev) {
+  const inp = ev && ev.target || $('acArq');
+  const files = [...inp.files]; inp.value = '';
+  if (!files.length) return;
   let col = $('acColSel').value;
   if (col === '__nova') col = $('acNovaNomeIn').value.trim();
+  // pasta inteira sem nome digitado: a coleção leva o nome da pasta
+  if (!col && files[0].webkitRelativePath) col = files[0].webkitRelativePath.split('/')[0];
   if (!col) { alert('Dê um nome para a coleção (ex.: Partituras, Coletâneas cifradas).'); return; }
-  const files = [...$('acArq').files]; $('acArq').value = '';
-  if (!files.length) return;
   const st = $('acStatus'), remover = $('acRemover').checked;
   try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch (e) {}
   st.textContent = 'Lendo a seleção…';
@@ -3106,6 +3137,7 @@ async function acSincronizar() {
     ant ? trocados++ : novos++;
   }
   if (remover) for (const [nome, m] of existentes) if (!vistos.has(nome)) { await idbDel('acervo', m.id); await idbDel('arquivos', m.id); saiu++; }
+  await idbPut('meta', Date.now(), 'sinc:' + col);
   st.textContent = `Pronto: "${col}" — ${novos} novos, ${trocados} atualizados, ${iguais} iguais${remover ? `, ${saiu} removidos` : ''}.`;
   $('acSinc').hidden = true;
   await acCarregar();
@@ -3153,7 +3185,7 @@ async function acParaRepertorio(id, bt) {
   if (bt) { bt.textContent = '✓ Adicionado'; bt.disabled = true; }
 }
 
-window.rpTestar = { paginarTexto, rpFontes };   // para testes
+window.rpTestar = { paginarTexto, rpFontes, acSincronizar };   // para testes
 
 // ---------- Início ----------
 window.addEventListener('DOMContentLoaded', () => {
@@ -3196,6 +3228,9 @@ window.addEventListener('DOMContentLoaded', () => {
     $('acSincBt').onclick = () => acAbrirSinc(null);
     $('acColSel').onchange = e => { $('acNovaNome').hidden = e.target.value !== '__nova'; };
     $('acArq').onchange = acSincronizar;
+    $('acPasta').onchange = acSincronizar;
+    // navegador sem escolha de pasta (iPad antes do iPadOS 18.4): esconde o botão da pasta
+    if (!('webkitdirectory' in document.createElement('input'))) $('acPastaLbl').hidden = true;
     $('acCancelar').onclick = () => { $('acSinc').hidden = true; };
     $('acBusca').oninput = acBuscar;
     acCarregar();
