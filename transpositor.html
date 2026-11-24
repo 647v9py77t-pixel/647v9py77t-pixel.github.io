@@ -14,7 +14,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
 <title>Transpositor</title>
-<script>window.APP_VERSAO = '20261124152356';</script>
+<script>window.APP_VERSAO = '20261124155018';</script>
 <style>
 :root{--azul:#1f3a5f;--ouro:#f2c14e;--fundo:#f4f1ea;--card:#fff;--txt:#1d1d1f;--sub:#6b6b70;--borda:#e2ddd2;--verm:#c0392b;--b2:#e7e2d6;--b2txt:#1f3a5f;--campo:#fff;--pre:#faf8f3;--h2:#1f3a5f;
   --seta:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%236b6b70' stroke-width='2'/%3E%3C/svg%3E")}
@@ -32,7 +32,7 @@ main{max-width:860px;margin:0 auto;padding:12px}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
 .row>label{flex:1 1 150px}
 label{display:block;font-size:13px;color:var(--sub);font-weight:600}
-select,input[type=number],input[type=text],textarea{width:100%;margin-top:4px;font:inherit;font-size:16px;min-height:44px;padding:10px;border:1px solid var(--borda);border-radius:10px;background:var(--campo);color:var(--txt);-webkit-appearance:none;appearance:none}
+select,input[type=number],input[type=text],input[type=search],textarea{width:100%;margin-top:4px;font:inherit;font-size:16px;min-height:44px;padding:10px;border:1px solid var(--borda);border-radius:10px;background:var(--campo);color:var(--txt);-webkit-appearance:none;appearance:none}
 select{padding-right:32px;background:var(--campo) var(--seta) no-repeat right 12px center;text-overflow:ellipsis}
 textarea{font-family:ui-monospace,Menlo,monospace;font-size:16px;min-height:180px}
 .tabs{display:flex;gap:6px;margin-bottom:12px}
@@ -156,6 +156,8 @@ body.so-pane .cfg,body.so-pane #res{display:none!important}
 .ac-abrir{flex:1;min-width:0;text-align:left;border:0;background:none;color:var(--txt);font:inherit;font-size:15px;padding:6px 2px;display:flex;flex-direction:column}
 .ac-abrir small{color:var(--sub);font-size:12px}
 .ac-res .mini{margin:0;white-space:nowrap}
+.ac-dentro-tit{font-weight:700;font-size:14px;margin:10px 0 2px;color:var(--h2)}
+input[type=search]{-webkit-appearance:none;appearance:none}
 .ac-pasta{border-color:var(--azul);border-style:solid;background:var(--b2)}
 .ac-lembrete{background:#fff0c7;color:#7a5300;border-radius:10px;padding:8px 10px;font-size:14px;margin:6px 0;display:flex;align-items:center;gap:8px}
 .ac-lembrete .mini{margin:0 0 0 auto}
@@ -289,7 +291,9 @@ body.leitor-aberto{overflow:hidden}
         <button class="b b2 mini" id="acCancelar" style="margin-top:6px">Cancelar</button>
       </div>
       <div id="acStatus" class="est-status"></div>
-      <input type="text" id="acBusca" placeholder="🔍 Buscar hino ou cifra pelo nome…" style="margin-top:8px">
+      <input type="search" id="acBusca" placeholder="🔍 Nº ou nome do louvor (ex.: 656, Grande é o Senhor)" style="margin-top:8px" enterkeyhint="search">
+      <button class="b b2" id="acBuscarDentro" style="width:100%;margin-top:6px">🔎 Procurar dentro das coletâneas (PDFs)</button>
+      <div id="acDentro"></div>
       <div id="acResultados"></div>
     </details>
     <div id="rpListaBox">
@@ -2899,9 +2903,9 @@ function rpDesenhar() {
   const it = RP.atual.itens, box = $('rpItens');
   box.innerHTML = it.length ? it.map((x, i) => `<div class="rp-item" data-i="${i}">
       <span class="rp-n">${i + 1}</span>
-      <button class="rp-tit" data-a="ren">${x.tipo === 'pdf' ? '📄' : '🎸'} ${esc(x.titulo)}<small>${x.tipo === 'pdf' ? `${x.paginas} pág.` : `cifra${x.st ? ` · transposta ${x.st > 0 ? '+' : ''}${x.st}` : ''}`}</small></button>
+      <button class="rp-tit" data-a="ren">${x.tipo === 'pdf' ? '📄' : '🎸'} ${esc(x.titulo)}<small>${x.tipo === 'pdf' ? (x.de ? `pág. ${x.de}${x.ate > x.de ? '–' + x.ate : ''} de ${x.paginas}` : `${x.paginas} pág.`) : `cifra${x.st ? ` · transposta ${x.st > 0 ? '+' : ''}${x.st}` : ''}`}</small></button>
       <button class="b b2 mini" data-a="up" ${i ? '' : 'disabled'}>↑</button><button class="b b2 mini" data-a="down" ${i < it.length - 1 ? '' : 'disabled'}>↓</button>
-      ${x.tipo === 'cifra' ? '<button class="b b2 mini" data-a="edit">✏️</button>' : ''}<button class="b b2 mini" data-a="del">🗑</button></div>`).join('')
+      ${x.tipo === 'cifra' ? '<button class="b b2 mini" data-a="edit">✏️</button>' : '<button class="b b2 mini" data-a="pags" title="Escolher páginas">📑</button>'}<button class="b b2 mini" data-a="del">🗑</button></div>`).join('')
     : '<p class="note">Adicione os PDFs dos hinos (pode escolher vários de uma vez) e as cifras. Depois arrume a ordem com ↑ ↓.</p>';
   box.querySelectorAll('.rp-item').forEach(row => row.querySelectorAll('[data-a]').forEach(b => b.onclick = async () => {
     const i = +row.dataset.i, x = it[i], a = b.dataset.a;
@@ -2909,6 +2913,14 @@ function rpDesenhar() {
     if (a === 'down' && i < it.length - 1) [it[i + 1], it[i]] = [it[i], it[i + 1]];
     if (a === 'ren') { const t = prompt('Título deste item:', x.titulo); if (!t) return; x.titulo = t.trim(); }
     if (a === 'edit') return rpCifraAbrir(i);
+    if (a === 'pags') {
+      const atual = x.de ? (x.ate > x.de ? `${x.de}-${x.ate}` : String(x.de)) : 'todas';
+      const r = prompt(`Quais páginas de "${x.titulo}" (tem ${x.paginas})?\nEx.: 412  ou  412-413  ou  todas`, atual);
+      if (r == null) return;
+      const v = intervalo(r, x.paginas);
+      if (v === false) { alert('Não entendi. Use um número (412) ou um intervalo (412-413), dentro de 1 a ' + x.paginas + '.'); return; }
+      if (v) { x.de = v[0]; x.ate = v[1]; } else { delete x.de; delete x.ate; }
+    }
     if (a === 'del') {
       if (!confirm(`Tirar "${x.titulo}" do repertório?`)) return;
       it.splice(i, 1);
@@ -2968,7 +2980,8 @@ async function rpFontes(r) {
     if (x.tipo === 'pdf') {
       const dados = await dadosPdf(x); if (!dados) continue;
       const doc = await pdfjsLib.getDocument({ data: dados.slice(0) }).promise; docs.push(doc);
-      for (let n = 1; n <= doc.numPages; n++) fontes.push({ tipo: 'pdf', doc, n, chave: x.ref + ':' + n, rotulo: n === 1 ? x.titulo : null, item: x });
+      const de = Math.max(1, x.de || 1), ate = Math.min(doc.numPages, x.ate || doc.numPages);
+      for (let n = de; n <= ate; n++) fontes.push({ tipo: 'pdf', doc, n, chave: x.ref + ':' + n, rotulo: n === de ? x.titulo : null, item: x });
     } else {
       const { texto, sub } = rpTextoCifra(x);
       paginarTexto(x.titulo, texto, sub).forEach((pg, k) => fontes.push({ tipo: 'texto', pg, chave: 'cifra:' + x.id + ':' + k, rotulo: k === 0 ? x.titulo : null, item: x }));
@@ -3027,6 +3040,14 @@ async function rpExcluir() {
   const r = RP.atual; if (!r || !confirm(`Excluir o repertório "${r.nome}"? Os PDFs dele também saem do aparelho.`)) return;
   for (const x of r.itens) if (x.tipo === 'pdf' && x.origem !== 'acervo') await idbDel('livros', x.ref).catch(() => {});
   await idbDel('repert', r.id); rpFechar();
+}
+// "412" → [412,412]; "412-413" → [412,413]; "todas"/vazio → null; inválido → false
+function intervalo(txt, max) {
+  const t = String(txt).trim().toLowerCase();
+  if (!t || t === 'todas' || t === 'tudo') return null;
+  const m = t.match(/^(\d+)\s*(?:[-–a]\s*(\d+))?$/); if (!m) return false;
+  const a = +m[1], b = m[2] ? +m[2] : a;
+  return a >= 1 && b >= a && b <= max ? [a, b] : false;
 }
 // bytes do PDF de um item de repertório (enviado direto ou vindo do acervo)
 async function dadosPdf(x) {
@@ -3133,10 +3154,11 @@ async function acSincronizar(ev) {
     const id = ant ? ant.id : 'ac' + uid();
     const meta = { id, colecao: col, nome: e.nome, titulo: e.nome.replace(/^.*\//, '').replace(/\.[^.]+$/, ''), tipo: texto ? 'texto' : 'pdf', tam: e.tam || buf.byteLength, mod: e.mod };
     await idbPut('arquivos', texto ? { texto: textoDe(buf) } : { dados: buf }, id);
+    await idbDel('meta', 'txt:' + id); delete AC.txt[id];   // conteúdo mudou: refaz o índice de busca
     await idbPut('acervo', meta);
     ant ? trocados++ : novos++;
   }
-  if (remover) for (const [nome, m] of existentes) if (!vistos.has(nome)) { await idbDel('acervo', m.id); await idbDel('arquivos', m.id); saiu++; }
+  if (remover) for (const [nome, m] of existentes) if (!vistos.has(nome)) { await idbDel('acervo', m.id); await idbDel('arquivos', m.id); await idbDel('meta', 'txt:' + m.id); saiu++; }
   await idbPut('meta', Date.now(), 'sinc:' + col);
   st.textContent = `Pronto: "${col}" — ${novos} novos, ${trocados} atualizados, ${iguais} iguais${remover ? `, ${saiu} removidos` : ''}.`;
   $('acSinc').hidden = true;
@@ -3145,7 +3167,7 @@ async function acSincronizar(ev) {
 async function acExcluirColecao(col) {
   const ms = AC.meta.filter(m => m.colecao === col);
   if (!confirm(`Tirar a coleção "${col}" (${ms.length} arquivos) do app? Os arquivos no seu tablet não são mexidos.`)) return;
-  for (const m of ms) { await idbDel('acervo', m.id); await idbDel('arquivos', m.id); }
+  for (const m of ms) { await idbDel('acervo', m.id); await idbDel('arquivos', m.id); await idbDel('meta', 'txt:' + m.id); }
   acCarregar();
 }
 function acBuscar() {
@@ -3163,26 +3185,84 @@ function acBuscar() {
   box.querySelectorAll('[data-id]').forEach(b => b.onclick = () => acAbrir(b.dataset.id));
   box.querySelectorAll('[data-add]').forEach(b => b.onclick = () => acParaRepertorio(b.dataset.add, b));
 }
-async function acAbrir(id) {
+async function acAbrir(id, pag) {
   const m = AC.meta.find(x => x.id === id), a = await idbGet('arquivos', id); if (!m || !a) return;
-  prepararPdf(); mostrarLeitor(m.titulo);
+  prepararPdf(); mostrarLeitor(m.titulo + (pag ? ` — pág. ${pag}` : ''));
   if (m.tipo === 'texto') { abrirFontes(paginarTexto(m.titulo, a.texto).map((pg, k) => ({ tipo: 'texto', pg, chave: 'acx:' + id + ':' + k })), [], 1, null); return; }
   const doc = await pdfjsLib.getDocument({ data: a.dados.slice(0) }).promise;
   const fontes = []; for (let n = 1; n <= doc.numPages; n++) fontes.push({ tipo: 'pdf', doc, n, chave: id + ':' + n });
-  abrirFontes(fontes, [doc], 1, null);
+  abrirFontes(fontes, [doc], pag || 1, null);
 }
-async function acParaRepertorio(id, bt) {
+// pag (opcional): coloca só aquela página no repertório; titulo (opcional): nome do item
+async function acParaRepertorio(id, bt, pag, titulo) {
   if (!RP.atual) return;
   const m = AC.meta.find(x => x.id === id), a = await idbGet('arquivos', id); if (!m || !a) return;
-  if (m.tipo === 'texto') RP.atual.itens.push({ id: uid(), tipo: 'cifra', titulo: m.titulo, texto: a.texto, modo: 'acordes', st: 0 });
+  if (m.tipo === 'texto') RP.atual.itens.push({ id: uid(), tipo: 'cifra', titulo: titulo || m.titulo, texto: a.texto, modo: 'acordes', st: 0 });
   else {
     prepararPdf();
     let paginas = m.paginas;
     if (!paginas) { const doc = await pdfjsLib.getDocument({ data: a.dados.slice(0) }).promise; paginas = doc.numPages; doc.destroy(); m.paginas = paginas; idbPut('acervo', m); }
-    RP.atual.itens.push({ id: uid(), tipo: 'pdf', origem: 'acervo', ref: id, titulo: m.titulo, paginas });
+    const it = { id: uid(), tipo: 'pdf', origem: 'acervo', ref: id, titulo: titulo || m.titulo, paginas };
+    if (pag) { it.de = it.ate = pag; }
+    RP.atual.itens.push(it);
   }
   await rpSalvar(); rpDesenhar();
   if (bt) { bt.textContent = '✓ Adicionado'; bt.disabled = true; }
+}
+
+// ---------- Busca DENTRO dos PDFs (número ou nome do louvor) ----------
+// Na 1ª vez o app lê o texto de cada página e guarda (meta 'txt:<id>'); depois a busca é instantânea.
+// PDFs que são só imagem escaneada não têm texto: para esses, abra e escolha a página com 📑.
+AC.txt = {};
+async function acIndice(m) {
+  if (AC.txt[m.id]) return AC.txt[m.id];
+  let idx = await idbGet('meta', 'txt:' + m.id);
+  if (!idx) {
+    const a = await idbGet('arquivos', m.id); if (!a) return [];
+    if (m.tipo === 'texto') idx = [normal(a.texto)];
+    else {
+      prepararPdf();
+      const doc = await pdfjsLib.getDocument({ data: a.dados.slice(0) }).promise; idx = [];
+      for (let n = 1; n <= doc.numPages; n++) {
+        const tc = await (await doc.getPage(n)).getTextContent();
+        idx.push(normal(tc.items.map(i => i.str).join(' ').replace(/\s+/g, ' ')));
+      }
+      if (!m.paginas) { m.paginas = doc.numPages; idbPut('acervo', m); }
+      doc.destroy();
+    }
+    await idbPut('meta', idx, 'txt:' + m.id);
+  }
+  return (AC.txt[m.id] = idx);
+}
+async function acBuscarDentro() {
+  const q0 = $('acBusca').value.trim(), q = normal(q0);
+  const box = $('acDentro'), st = $('acStatus');
+  if (!q) { box.innerHTML = '<p class="note">Digite o número (ex.: 656) ou o nome do louvor na busca acima.</p>'; return; }
+  const num = /^\d+$/.test(q), re = num ? new RegExp('(^|[^0-9])' + q + '(?![0-9])') : null, palavras = q.split(/\s+/);
+  const achados = []; let semTexto = 0, i = 0;
+  for (const m of AC.meta) {
+    i++; if (!AC.txt[m.id]) st.textContent = `Lendo os PDFs (só na 1ª vez)… ${i} de ${AC.meta.length}`;
+    let idx; try { idx = await acIndice(m); } catch (e) { continue; }
+    if (m.tipo === 'pdf' && idx.every(t => !t.trim())) { semTexto++; continue; }
+    idx.forEach((t, k) => {
+      let pos;
+      if (num) { const r = re.exec(t); pos = r ? r.index + r[1].length : -1; }
+      else pos = palavras.every(p => t.includes(p)) ? t.indexOf(palavras[0]) : -1;
+      if (pos >= 0) achados.push({ m, pag: k + 1, pos, trecho: t.slice(Math.max(0, pos - 25), pos + 70) });
+    });
+  }
+  st.textContent = '';
+  // o número/título no começo da página (cabeçalho do louvor) vem primeiro
+  achados.sort((a, b) => (a.pos > 120) - (b.pos > 120) || a.pos - b.pos);
+  const podeAdd = !!RP.atual, mostra = achados.slice(0, 30);
+  const tituloItem = r => num ? `Nº ${q0} · ${r.m.titulo}` : q0.replace(/^./, c => c.toUpperCase());
+  box.innerHTML = `<div class="ac-dentro-tit">Dentro dos PDFs: ${achados.length ? `${achados.length} página${achados.length > 1 ? 's' : ''}` : 'nada encontrado'}${achados.length > 30 ? ' (mostrando 30)' : ''}</div>` +
+    mostra.map((r, j) => `<div class="ac-res"><button class="ac-abrir" data-j="${j}">📄 ${esc(r.m.titulo)} — pág. ${r.pag}<small>…${esc(r.trecho)}…</small></button>
+      ${podeAdd ? `<button class="b b2 mini" data-addp="${j}">+ Só esta página</button>` : ''}</div>`).join('') +
+    (semTexto ? `<p class="note">${semTexto} PDF${semTexto > 1 ? 's são imagens escaneadas' : ' é imagem escaneada'} (sem texto para buscar). Nesses, abra o PDF e use 📑 Páginas no repertório.</p>` : '') +
+    (!podeAdd && achados.length ? '<p class="note">Para colocar no repertório, abra um repertório abaixo e busque de novo.</p>' : '');
+  box.querySelectorAll('[data-j]').forEach(b => b.onclick = () => { const r = mostra[+b.dataset.j]; acAbrir(r.m.id, r.pag); });
+  box.querySelectorAll('[data-addp]').forEach(b => b.onclick = () => { const r = mostra[+b.dataset.addp]; acParaRepertorio(r.m.id, b, r.pag, tituloItem(r)); });
 }
 
 window.rpTestar = { paginarTexto, rpFontes, acSincronizar };   // para testes
@@ -3232,7 +3312,9 @@ window.addEventListener('DOMContentLoaded', () => {
     // navegador sem escolha de pasta (iPad antes do iPadOS 18.4): esconde o botão da pasta
     if (!('webkitdirectory' in document.createElement('input'))) $('acPastaLbl').hidden = true;
     $('acCancelar').onclick = () => { $('acSinc').hidden = true; };
-    $('acBusca').oninput = acBuscar;
+    $('acBusca').oninput = () => { acBuscar(); $('acDentro').innerHTML = ''; };
+    $('acBusca').onkeydown = e => { if (e.key === 'Enter') acBuscarDentro(); };
+    $('acBuscarDentro').onclick = acBuscarDentro;
     acCarregar();
   }
 });
