@@ -125,6 +125,19 @@ body.so-pane .cfg,body.so-pane #res{display:none!important}
 .legenda{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;margin:2px 0 8px}
 .lg::before{content:"";display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:-1px}
 .lg.ok::before{background:#1e8449}.lg.am::before{background:#d68910}.lg.er::before{background:#c0392b}
+/* Aquecimento */
+.aq-passo{border-bottom:1px dashed var(--borda);padding-bottom:10px;margin-bottom:6px}
+.aq-tit3{margin-top:12px!important}
+.resp{display:flex;align-items:center;gap:16px;margin:8px 0}
+.resp-bola{flex:none;width:96px;height:96px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#7fb3ff,#1f3a5f);display:flex;align-items:center;justify-content:center;transform:scale(.42);box-shadow:0 0 0 6px rgba(127,179,255,.18)}
+.resp-n{color:#fff;font-size:30px;font-weight:800;transform-origin:center}
+.resp-txt{font-size:17px;font-weight:700;color:var(--h2)}
+.sirene{background:var(--b2);border-radius:12px;padding:6px 8px;margin:6px 0}
+.sirene svg{width:100%;height:auto;display:block}
+.sir-linha{fill:none;stroke:var(--sub);stroke-width:3;stroke-dasharray:6 6}
+.sir-ponto{fill:var(--ouro);stroke:#7a4b00;stroke-width:2}
+.sir-txt{font-size:13px;color:var(--sub);text-align:center}
+.trava{text-align:center;padding:10px 4px}.trava-ic{font-size:40px}
 .rampa-info{flex:0 0 auto;font-size:13px;color:var(--sub);text-align:right;padding-bottom:6px}.rampa-info b{color:var(--h2);font-size:16px}
 /* Plano do professor e biblioteca */
 .plano-livro{margin-bottom:12px}.pl-tit{font-size:14px;margin-bottom:4px}.pl-tit .falta{color:var(--sub);font-weight:400}
@@ -954,15 +967,29 @@ function oitavaConfortavel(pc, alcance, lo = 58, hi = 79) {
 
 const AREAS = [
   {
-    id: 'aquec', nome: 'Aquecimento: respiração e bocal', icone: '🌬️', min: 5, tipo: 'timer',
-    ref: 'Na linha do James Stamp, que o Bruno passou (Alternative Warm-ups 3a/3b): ar → lábios → bocal → instrumento. Depois deste bloco, toque o 3a/3b do PDF pelo Plano do professor.',
+    id: 'aquec', nome: 'Aquecimento (sempre primeiro)', icone: '🌬️', min: 6, tipo: 'aquec',
+    ref: 'Na linha do James Stamp, que o Bruno passou: ar → lábios/bocal → instrumento. As outras partes do estudo só abrem depois do aquecimento do dia.',
+    dica: 'Ligaduras lentas e suaves, sem forçar. Pense "para baixo" ao subir e "para cima" ao descer. Respire entre as linhas e descanse o mesmo tempo que tocou.',
     texto: nivel => [
-      'Respiração: inspire em 8 tempos, segure 8, solte em 8. Depois 8-1-8 e 1-8-8. Encha bem e "beba" mais um pouquinho de ar no fim.',
       'Lábios sem bocal: vibre no Dó grave por 6–8 tempos e suba meio tom por vez até o Sol do meio' + (nivel >= 4 ? ' (meta: Dó do meio).' : '.'),
-      'Bocal: segure com polegar e indicador perto da ponta, pressão leve. Entrada sempre em "pronto – respira – toca", com "tu".',
-      nivel >= 4 ? 'Bocal: sirenes e uma escala de uma oitava num fôlego só; depois a primeira frase de um hino.' : 'Bocal: sirenes suaves (grave → agudo → grave) e notas longas confortáveis.',
-      'No instrumento: ligaduras lentas descendo de tom em tom. Pense "para baixo" ao subir e "para cima" ao descer.',
+      'Bocal: segure com polegar e indicador perto da ponta, pressão leve. Entrada em "pronto – respira – toca", com "tu".',
     ],
+    // Instrumento: arcos lentos ligados (padrão próprio), descendo meio tom por linha. O tom de partida muda a cada dia (regra do Stamp).
+    gerar(n, dia) {
+      const linhas = Math.min(10, 4 + Math.floor(n / 2));
+      const partidas = n <= 3 ? [67, 69, 65] : [72, 71, 70, 69];
+      const ini = partidas[dia % partidas.length];
+      const notas = [];
+      for (let l = 0; l < linhas; l++) {
+        const t = ini - l; if (t - 5 < 54) break;
+        // 1 – 3 – 2 – 5 abaixo – 1, em mínimas, tudo ligado; fecha numa semibreve
+        [[t, 8], [t + 4, 8], [t + 2, 8], [t - 5, 8], [t, 16]].forEach(([w, d]) => notas.push({ w, d }));
+        if (n >= 5) [[t - 5, 8], [t - 12 >= 54 ? t - 12 : t - 5, 8]].forEach(([w, d]) => notas.push({ w, d }));
+        const usado = notas.reduce((s, x) => s + x.d, 0) % 16;
+        notas.push({ w: null, d: (usado ? 16 - usado : 0) + 8 });       // respira
+      }
+      return { titulo: 'Aquecimento no instrumento', bpm: 60, notas, fifthsW: 0, bordao: null, ligado: true, semRampa: true };
+    },
   },
   {
     id: 'longas', nome: 'Notas longas e afinação', icone: '🎯', min: 8,
@@ -1168,7 +1195,7 @@ function clarkeExercicio(num) {
 
 // Ordem da rotina igual à das aulas do Bruno: aquecimento (Stamp) → flow (Cichowicz) → flexibilidade (Bai Lin)
 // → técnica (Clarke) → articulação/escalas → leitura (Getchell) → ouvido → repertório. Total ≈ 60 min.
-const ORDEM_MIN = { aquec: 5, longas: 5, flow: 6, flex: 8, tecnica: 7, artic: 5, escalas: 5, ritmo: 8, ouvido: 6, repert: 5 };
+const ORDEM_MIN = { aquec: 6, longas: 4, flow: 6, flex: 8, tecnica: 7, artic: 5, escalas: 5, ritmo: 8, ouvido: 6, repert: 5 };
 AREAS.sort((a, b) => Object.keys(ORDEM_MIN).indexOf(a.id) - Object.keys(ORDEM_MIN).indexOf(b.id));
 AREAS.forEach(a => { if (ORDEM_MIN[a.id]) a.min = ORDEM_MIN[a.id]; });
 
@@ -1818,6 +1845,7 @@ function mostrarCorrecao(el, r, ex, area, pt) {
     <div class="chips">${chips}</div><ul class="dicas">${dicas.map(d => `<li>${esc(d)}</li>`).join('')}</ul>`;
   const rampa = ex._bpmUsado && !ex.semRampa && P.rampaOn !== false ? { bpm: ex._bpmUsado, meta: ex.bpm } : null;
   const msg = registrarNota(P, area, r.nota, hoje, rampa); salvar(); desenharCabecalho();
+  if (area === 'aquec') concluirAquecimento();   // aquecimento vale pelo fato de ter tocado, não pela nota
   if (rampa) { const novo = bpmAtual(area, ex), inp = $('est_' + area) && $('est_' + area).querySelector('.bpm'); if (inp) inp.value = novo; }
   if (msg) { toastE(msg); el.insertAdjacentHTML('afterbegin', `<p class="subiu">${esc(msg)} O próximo exercício já vem no nível novo.</p>`); }
   atualizarResumo(area);
@@ -1848,8 +1876,30 @@ function atualizarResumo(id) {
   const a = AREAS.find(x => x.id === id), s = document.querySelector(`#est_${id} > summary`);
   if (s) s.innerHTML = resumoHTML(a);
 }
+// ---------- Aquecimento obrigatório ----------
+const aquecido = () => (P.feito[hoje] || []).includes('aquec');
+function concluirAquecimento() {
+  if (!aquecido()) { marcarFeito(P, 'aquec', hoje); salvar(); toastE('Aquecimento feito! Os estudos de hoje estão liberados. 🎺'); }
+  atualizarResumo('aquec'); desenharCabecalho();
+  // libera as partes travadas
+  AREAS.forEach(a => {
+    if (a.id === 'aquec') return;
+    const d = $('est_' + a.id); if (!d) return;
+    atualizarResumo(a.id);
+    if (d.dataset.trava) { delete d.dataset.trava; delete d.dataset.ok; if (d.open) desenharArea(a.id); }
+  });
+}
+function irAquecimento() {
+  const ab = document.querySelector('.tab[data-t=estudo]'); if (ab) ab.click();
+  AREAS.forEach(a => { const d = $('est_' + a.id); if (d && a.id !== 'aquec') d.open = false; });
+  const d = $('est_aquec'); d.open = true; if (!d.dataset.ok) desenharArea('aquec');
+  setTimeout(() => d.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+}
+window.estudoAquecido = aquecido;
+window.irAquecimento = irAquecimento;
 function resumoHTML(a) {
   const feito = (P.feito[hoje] || []).includes(a.id);
+  if (a.id !== 'aquec' && !feito && !aquecido()) return `<span class="ck">🔒</span><span class="nm">${a.icone} ${esc(a.nome)}</span><span class="mt">depois do aquecimento</span>`;
   return `<span class="ck">${feito ? '✅' : '⬜'}</span><span class="nm">${a.icone} ${esc(a.nome)}</span><span class="mt">${a.min} min${a.tipo === 'timer' ? '' : ' · nív. ' + P.nivel[a.id]}</span>`;
 }
 function montar() {
@@ -1875,6 +1925,13 @@ function desenharArea(id) {
   parar();
   const a = AREAS.find(x => x.id === id), det = $('est_' + id), el = det.querySelector('.est-corpo');
   det.dataset.ok = '1'; atualizarResumo(id);
+  if (id !== 'aquec' && !aquecido()) {
+    det.dataset.trava = '1';
+    el.innerHTML = `<div class="trava"><div class="trava-ic">🔒</div><p><b>Primeiro o aquecimento.</b><br>Todo dia, antes de qualquer estudo: respiração, bocal e as ligaduras lentas no instrumento (uns 6 min).</p>
+      <button class="b" data-ir>🌬️ Ir para o aquecimento</button></div>`;
+    el.querySelector('[data-ir]').onclick = irAquecimento;
+    return;
+  }
   if (a.tipo === 'timer') return desenharTimer(a, el);
   if (a.tipo === 'ouvido') return desenharOuvido(a, el);
   const ex = gerarEx(a); exAtual[id] = ex;
@@ -1897,6 +1954,7 @@ function desenharArea(id) {
     </div>
     <label class="file">📂 Enviar uma gravação deste exercício<input type="file" accept="audio/*,video/*" class="arq"></label>
     <div class="est-status"></div><div class="est-res"></div>`;
+  if (id === 'aquec') prepararAquecimento(a, el);
   ABCJS.renderAbc('sc_' + id, toABC(writtenView(exercicioModelo(ex), 'Bb', 0, 0), ex.titulo, 'Trompete em Si♭'), { responsive: 'resize', paddingleft: 0, paddingright: 0, paddingtop: 0, add_classes: true });
   ligarNivel(el, a);
   const q = s => el.querySelector(s), status = s => q('.est-status').textContent = s;
@@ -1914,7 +1972,7 @@ function desenharArea(id) {
       const ag = agendar(ex, o.bpm, { contagem: true, clique: acao === 'junto' && o.clique, modelo: true, volModelo: acao === 'junto' ? 0.09 : 0.16, bordao: o.bordao });
       cursor(host, mapa, ag.ini, o.bpm);
       status(acao === 'junto' ? 'Toque junto com o modelo…' : 'Ouvindo o modelo…');
-      timers.push(setTimeout(() => { parar(); status(''); }, (ag.fim - ctx.currentTime + 0.6) * 1000));
+      timers.push(setTimeout(() => { parar(); status(''); if (id === 'aquec' && acao === 'junto') concluirAquecimento(); }, (ag.fim - ctx.currentTime + 0.6) * 1000));
       return;
     }
     // gravar e corrigir (com cursor e afinação ao vivo)
@@ -1958,6 +2016,59 @@ function desenharArea(id) {
       mostrarCorrecao(q('.est-res'), avaliar(notas.map(n => ({ m: n.m, t: n.t, d: n.d })), tocadas, 60 / op().bpm, true), ex, id, pt);
     } catch (err) { status('Não consegui ler esse arquivo de áudio/vídeo.'); }
   };
+}
+// ---------- Aquecimento: 1) respiração guiada  2) lábios/bocal com sirene  3) instrumento (partitura animada) ----------
+function prepararAquecimento(a, el) {
+  const n = P.nivel.aquec;
+  const pre = `<div class="aq-passo"><h3>1 · Respiração guiada</h3>
+      <div class="resp"><div class="resp-bola"><span class="resp-n">8</span></div><div class="resp-txt">Siga o círculo: enche, segura, esvazia.</div></div>
+      <div class="btns"><button class="b b2" data-aq="resp">▶ Respirar junto (${n >= 4 ? '8-8-8, 8-1-8, 1-8-8' : '3 × 8-8-8'})</button></div></div>
+    <div class="aq-passo"><h3>2 · Lábios e bocal</h3><ol class="passos">${a.texto(n).map(t => `<li>${esc(t)}</li>`).join('')}</ol>
+      <div class="sirene"><svg viewBox="0 0 300 90"><path class="sir-linha" d="M12 78 C 90 78, 110 10, 150 10 S 210 78, 288 78"/><circle class="sir-ponto" r="8" cx="12" cy="78"/></svg>
+      <div class="sir-txt">Sirene: imite no bocal o som que sobe e desce.</div></div>
+      <div class="btns"><button class="b b2" data-aq="sir">▶ Sirene (2 vezes)</button></div></div>
+    <h3 class="aq-tit3">3 · No instrumento</h3>`;
+  el.querySelector('h3').insertAdjacentHTML('beforebegin', pre);
+  el.insertAdjacentHTML('beforeend', `<p class="note" style="text-align:center">${aquecido() ? '✅ Aquecimento de hoje feito.' : 'Ao terminar o "Tocar junto" ou uma gravação, os estudos de hoje são liberados.'}<br><button class="b b2 mini" data-aq="ja">Já aqueci (pular)</button></p>`);
+  el.querySelector('[data-aq=resp]').onclick = e => respirar(el, n, e.currentTarget);
+  el.querySelector('[data-aq=sir]').onclick = e => sirene(el, e.currentTarget);
+  el.querySelector('[data-aq=ja]').onclick = () => { if (aquecido() || confirm('Marcar o aquecimento de hoje como feito? (o Bruno pede aquecimento antes de tudo)')) concluirAquecimento(); };
+}
+function respirar(el, n, bt) {
+  parar();
+  const bola = el.querySelector('.resp-bola'), num = el.querySelector('.resp-n'), txt = el.querySelector('.resp-txt');
+  const ciclos = n >= 4 ? [[8, 8, 8], [8, 1, 8], [1, 8, 8]] : [[8, 8, 8], [8, 8, 8], [8, 8, 8]];
+  const fases = [];
+  ciclos.forEach(([i, s, o], k) => fases.push(['Inspire', i, 1], ['Segure', s, null], ['Solte o ar', o, 0.42], k < ciclos.length - 1 ? ['Descanse', 3, null] : null));
+  const lista = fases.filter(Boolean);
+  let f = 0, c = 0; bt.classList.add('ativo'); manterTela(true);
+  const passo = () => {
+    if (f >= lista.length) { bt.classList.remove('ativo'); txt.textContent = 'Pronto! Agora os lábios e o bocal.'; num.textContent = '✓'; bola.style.transition = 'transform 1s'; bola.style.transform = 'scale(.6)'; manterTela(false); return; }
+    const [nome, dur, alvo] = lista[f];
+    if (c === 0) { txt.textContent = nome + (dur > 1 ? ` (${dur})` : ''); if (alvo != null) { bola.style.transition = `transform ${dur}s linear`; bola.style.transform = `scale(${alvo})`; } bola.dataset.f = nome; }
+    num.textContent = dur - c; c++;
+    if (c >= dur) { f++; c = 0; }
+    timers.push(setTimeout(passo, 1000));
+  };
+  bola.style.transition = 'none'; bola.style.transform = 'scale(.42)'; requestAnimationFrame(() => passo());
+}
+function sirene(el, bt) {
+  novoCtx('playback'); bt.classList.add('ativo');
+  const path = el.querySelector('.sir-linha'), pt = el.querySelector('.sir-ponto'), L = path.getTotalLength();
+  const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'triangle';
+  const lo = freq(55), hi = freq(67), t0 = ctx.currentTime + 0.1, meia = 3, voltas = 2;
+  o.frequency.setValueAtTime(lo, t0); g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(0.18, t0 + 0.2);
+  for (let v = 0; v < voltas; v++) { o.frequency.exponentialRampToValueAtTime(hi, t0 + (2 * v + 1) * meia); o.frequency.exponentialRampToValueAtTime(lo, t0 + (2 * v + 2) * meia); }
+  const fim = t0 + voltas * 2 * meia; g.gain.setValueAtTime(0.18, fim - 0.3); g.gain.linearRampToValueAtTime(0, fim);
+  o.connect(g).connect(ctx.destination); o.start(t0); o.stop(fim + 0.05); nos.push(o);
+  const anim = () => {
+    if (!ctx) return;
+    const t = ctx.currentTime - t0; if (t > voltas * 2 * meia) { parar(); return; }
+    const fase = (t % (2 * meia)) / (2 * meia), p = pt; const q = path.getPointAtLength(Math.max(0, Math.min(1, fase)) * L);
+    p.setAttribute('cx', q.x); p.setAttribute('cy', q.y);
+    rafs.push(requestAnimationFrame(anim));
+  };
+  anim();
 }
 function desenharTimer(a, el) {
   const itens = a.texto(P.nivel[a.id] || 3);
@@ -2262,7 +2373,9 @@ async function desenharPlano(livros) {
       }).join('') + '</div>';
   }).join('');
   box.querySelectorAll('.pl-ck').forEach(b => b.onclick = () => { const t = PLANO.find(x => x.id === b.dataset.t), s = estadoT(t); s.feito = !s.feito; progPlano[t.id] = s; salvarPlano(); desenharPlano(livros); });
-  box.querySelectorAll('.pl-abrir').forEach(b => b.onclick = () => { const t = PLANO.find(x => x.id === b.dataset.t); const l = livros.find(x => x.livro === t.livro); if (l) abrirLeitor(l.id, t.pag, t); });
+  box.querySelectorAll('.pl-abrir').forEach(b => b.onclick = () => {
+    if (window.estudoAquecido && !window.estudoAquecido() && confirm('Você ainda não aqueceu hoje. O Bruno pede o aquecimento antes de qualquer estudo.\n\nIr para o aquecimento agora?')) return window.irAquecimento();
+    const t = PLANO.find(x => x.id === b.dataset.t); const l = livros.find(x => x.livro === t.livro); if (l) abrirLeitor(l.id, t.pag, t); });
 }
 function estadoT(t) { return progPlano[t.id] || { feito: !!t.feito, bpm: null }; }
 
