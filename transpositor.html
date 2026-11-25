@@ -14,7 +14,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
 <title>Transpositor</title>
-<script>window.APP_VERSAO = '20261124210000';</script>
+<script>window.APP_VERSAO = '20261124211500';</script>
 <style>
 :root{--azul:#1f3a5f;--ouro:#f2c14e;--fundo:#f4f1ea;--card:#fff;--txt:#1d1d1f;--sub:#6b6b70;--borda:#e2ddd2;--verm:#c0392b;--b2:#e7e2d6;--b2txt:#1f3a5f;--campo:#fff;--pre:#faf8f3;--h2:#1f3a5f;
   --seta:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%236b6b70' stroke-width='2'/%3E%3C/svg%3E")}
@@ -340,6 +340,10 @@ body.leitor-aberto{overflow:hidden}
     <div class="af-valv" id="afVal"></div>
     <p class="af-dica" id="afDica"></p>
     <button class="b" id="afBtn" style="width:100%">🎤 Ligar afinador</button>
+    <div class="row" style="margin-top:12px">
+      <label>Microfone (vale para o app todo)<select id="micSel"><option value="auto">Automático: microfone do iPad/iPhone</option></select></label>
+    </div>
+    <p class="note" id="micInfo">Com AirPods, o microfone deles corta o som do trompete (filtro de voz). Deixe no microfone do aparelho e use os AirPods só para ouvir.</p>
     <div class="row" style="margin-top:12px">
       <label>Lá de referência (Hz)<select id="afA4"><option>438</option><option>439</option><option selected>440</option><option>441</option><option>442</option><option>443</option></select></label>
     </div>
@@ -1621,14 +1625,47 @@ function status(s) { $('status').textContent = s; }
 // 1) contexto de áudio com a MESMA taxa do microfone (AirPods usam 16/24 kHz; com taxa diferente o Safari entrega silêncio)
 // 2) gravador nativo (MediaRecorder) em paralelo, usado como reserva se a captura direta vier vazia ou muda
 const MIC_OPTS = { audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } };
+const MIC_BT = /airpods|bluetooth|beats|headset|fone|buds|bose|jbl|sony|wh-|hands-?free/i;
+const MIC_INT = /ipad|iphone|built-?in|interno|embutido|integrado|microfone do|microphone/i;
+async function preencherMics() {
+  const sel = document.getElementById('micSel'); if (!sel || !navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+  let pref = 'auto'; try { pref = localStorage.getItem('tp_mic') || 'auto'; } catch (e) {}
+  try {
+    const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput' && d.deviceId);
+    sel.innerHTML = '<option value="auto">Automático: microfone do iPad/iPhone</option>' + devs.map((d, i) => `<option value="${d.deviceId}">${(d.label || 'Microfone ' + (i + 1)).replace(/</g, '&lt;')}${MIC_BT.test(d.label) ? ' (fone)' : ''}</option>`).join('');
+    sel.value = devs.some(d => d.deviceId === pref) ? pref : 'auto';
+    const info = document.getElementById('micInfo');
+    if (info && window.__micAtual) info.textContent = 'Em uso agora: ' + window.__micAtual + (MIC_BT.test(window.__micAtual) ? ' — microfone de fone corta o trompete; escolha o do aparelho.' : '');
+  } catch (e) {}
+}
+window.addEventListener('DOMContentLoaded', () => {
+  const sel = document.getElementById('micSel'); if (!sel) return;
+  sel.onchange = () => { try { localStorage.setItem('tp_mic', sel.value); } catch (e) {} if (typeof afinadorDesligar === 'function' && typeof af !== 'undefined' && af) { afinadorDesligar(); } };
+  preencherMics();
+});
 async function abrirMic(ctxAtual) {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('este navegador não libera o microfone; abra pelo Safari');
   let stream;
-  try { stream = await navigator.mediaDevices.getUserMedia(MIC_OPTS); }
+  const pedir = async id => navigator.mediaDevices.getUserMedia(id ? { audio: { ...MIC_OPTS.audio, deviceId: { exact: id } } } : MIC_OPTS);
+  let pref = 'auto'; try { pref = localStorage.getItem('tp_mic') || 'auto'; } catch (e) {}
+  try { stream = await pedir(pref !== 'auto' ? pref : null); }
   catch (e) {
     if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) throw new Error('o microfone está bloqueado. Ajustes › Apps › Safari › Microfone › Permitir, e abra o app de novo');
-    throw e;
+    if (pref !== 'auto') { try { stream = await pedir(null); } catch (e2) { throw e2; } } else throw e;
   }
+  // Automático: se caiu num microfone Bluetooth (AirPods etc.), troca para o interno
+  try {
+    const tr = stream.getAudioTracks()[0], lbl = (tr && tr.label) || '';
+    if (pref === 'auto' && MIC_BT.test(lbl)) {
+      const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput');
+      const interno = devs.find(d => d.label && !MIC_BT.test(d.label) && MIC_INT.test(d.label)) || devs.find(d => d.label && !MIC_BT.test(d.label));
+      if (interno) { const s2 = await pedir(interno.deviceId).catch(() => null); if (s2) { stream.getTracks().forEach(t => t.stop()); stream = s2; } }
+    }
+    const lbl2 = (stream.getAudioTracks()[0] || {}).label || '';
+    window.__micAtual = lbl2;
+    try { if (MIC_BT.test(lbl2) && typeof toast === 'function') toast('Usando o microfone do fone: o som do trompete pode ser cortado'); } catch (e) {}
+    preencherMics();
+  } catch (e) {}
   let sr = null; try { sr = stream.getAudioTracks()[0].getSettings().sampleRate || null; } catch (e) {}
   const AC = window.AudioContext || window.webkitAudioContext;
   let ctx = ctxAtual;
@@ -1734,7 +1771,7 @@ async function stopRec() {
   }
   try { r.ctx.close(); } catch (e) {}
   if (data.length < sr * 0.5) { status('Gravação curta demais.'); return; }
-  if (audioMudo(data, sr)) { status('A gravação chegou em silêncio. Feche outros apps que usam o microfone (ligação, gravador, Bluetooth) e tente de novo; se usar AirPods, teste também sem eles.'); return; }
+  if (audioMudo(data, sr)) { status('A gravação chegou em silêncio' + (window.__micAtual ? ' (microfone: ' + window.__micAtual + ')' : '') + '. Na aba Afinador, escolha o microfone do aparelho e tente de novo.'); return; }
   analyze(data, sr, t0, 'Gravação');
 }
 async function openAudio(file) {
