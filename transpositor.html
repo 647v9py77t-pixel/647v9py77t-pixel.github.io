@@ -14,7 +14,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
 <title>Transpositor</title>
-<script>window.APP_VERSAO = '20261124215500';</script>
+<script>window.APP_VERSAO = '20261124221500';</script>
 <style>
 :root{--azul:#1f3a5f;--ouro:#f2c14e;--fundo:#f4f1ea;--card:#fff;--txt:#1d1d1f;--sub:#6b6b70;--borda:#e2ddd2;--verm:#c0392b;--b2:#e7e2d6;--b2txt:#1f3a5f;--campo:#fff;--pre:#faf8f3;--h2:#1f3a5f;
   --seta:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%236b6b70' stroke-width='2'/%3E%3C/svg%3E")}
@@ -343,7 +343,7 @@ body.leitor-aberto{overflow:hidden}
     <div class="row" style="margin-top:12px">
       <label>Microfone (vale para o app todo)<select id="micSel"><option value="auto">Automático: microfone do iPad/iPhone</option></select></label>
     </div>
-    <button class="b b2" id="micTeste" style="width:100%;margin-top:10px">🔧 Testar microfone (12 s: uma nota longa e depois algumas notas)</button>
+    <button class="b b2" id="micTeste" style="width:100%;margin-top:10px">🔧 Testar microfone (toque uma nota longa por 5 s)</button>
     <pre id="micDiag" hidden style="white-space:pre-wrap;font-size:13px;margin-top:8px"></pre>
     <p class="note" id="micInfo">Com AirPods, o microfone deles corta o som do trompete (filtro de voz). Deixe no microfone do aparelho e use os AirPods só para ouvir.</p>
     <div class="row" style="margin-top:12px">
@@ -849,33 +849,42 @@ function analyzeAudio(data, sr0, onProgress) {
   const { x, sr } = downsample(data, sr0);
   const N = 1024, hop = 256, d = new Float32Array(N >> 1);
   const frames = [], nF = Math.max(0, Math.floor((x.length - N) / hop));
-  let maxR = 0;
   for (let i = 0; i < nF; i++) {
     const o = i * hop; let e = 0;
     for (let j = 0; j < N; j++) e += x[o + j] * x[o + j];
-    const rms = Math.sqrt(e / N); maxR = Math.max(maxR, rms);
-    frames.push({ rms, o });
+    frames.push({ rms: Math.sqrt(e / N), o });
   }
-  const gate = Math.max(0.005, maxR * 0.08);
+  // nível de referência robusto (percentil 90): picos de ataque não derrubam o resto da nota
+  const rs = frames.map(f => f.rms).filter(r => r > 0.002).sort((a, b) => a - b);
+  const ref = rs.length ? rs[Math.floor(rs.length * 0.9)] : 0;
+  const gate = Math.max(0.004, ref * 0.12), piso = Math.max(0.0025, ref * 0.05);
   for (let i = 0; i < nF; i++) {
-    const fr = frames[i]; fr.midi = null;
-    if (fr.rms >= gate) { const r = yin(x, fr.o, N, sr, d); if (r && r.conf > 0.8) fr.midi = 69 + 12 * Math.log2(r.f / 440); }
+    const fr = frames[i]; fr.midi = null; fr.conf = 0;
+    if (fr.rms >= piso) {
+      const r = yin(x, fr.o, N, sr, d);
+      // abaixo do gate só aceita se a altura for bem clara (microfone de fone abafa notas longas)
+      if (r && (r.conf > (fr.rms >= gate ? 0.8 : 0.92))) { fr.midi = 69 + 12 * Math.log2(r.f / 440); fr.conf = r.conf; }
+    }
     if (onProgress && i % 200 === 0) onProgress(i / nF);
   }
+  // afinação geral do instrumento (média circular do desvio): evita nota "pulando" entre dois semitons
+  let off = 0; { let sx = 0, sy = 0, k = 0;
+    frames.forEach(f => { if (f.midi != null && f.conf > 0.9) { const a = 2 * Math.PI * f.midi; sx += Math.cos(a); sy += Math.sin(a); k++; } });
+    if (k >= 10 && Math.hypot(sx, sy) / k > 0.5) off = Math.atan2(sy, sx) / (2 * Math.PI); }
+  frames.forEach(f => { f.adj = f.midi == null ? null : f.midi - off; });
   // filtro de mediana (5 quadros)
   const mid = frames.map((_, i) => {
-    const w = []; for (let k = -2; k <= 2; k++) { const f = frames[i + k]; if (f && f.midi != null) w.push(Math.round(f.midi)); }
-    if (frames[i].midi == null || w.length < 3) return null;
+    const w = []; for (let k = -2; k <= 2; k++) { const f = frames[i + k]; if (f && f.adj != null) w.push(Math.round(f.adj)); }
+    if (frames[i].adj == null || w.length < 3) return null;
     w.sort((a, b) => a - b); return w[w.length >> 1];
   });
-  // ataques (subida de volume)
+  // ataques: subida forte de volume
   const onset = frames.map((f, i) => {
     if (i < 4) return false;
     const prev = Math.min(...frames.slice(i - 4, i).map(z => z.rms));
-    return f.rms > 1.6 * prev && f.rms - prev > 0.12 * maxR;
+    return f.rms > 2 * prev && f.rms - prev > 0.5 * ref;
   });
   for (let i = 1; i < onset.length; i++) if (onset[i] && onset.slice(Math.max(0, i - 6), i).some(Boolean)) onset[i] = false;
-  // segmentos
   const fdur = hop / sr, segs = [];
   let cur = null;
   for (let i = 0; i < nF; i++) {
@@ -883,21 +892,36 @@ function analyzeAudio(data, sr0, onProgress) {
     if (cur && m === cur.m && !(onset[i] && m != null)) { cur.e = i + 1; continue; }
     cur = { m, s: i, e: i + 1 }; segs.push(cur);
   }
-  // remove trechos muito curtos (< ~60 ms) juntando ao anterior
-  const minF = Math.ceil(0.06 / fdur);
-  const clean = []; let brk = false;
+  const minF = Math.ceil(0.06 / fdur), gapF = Math.ceil(0.15 / fdur);
+  const media = (a, b) => { let s = 0, n = 0; for (let i = a; i < b; i++) { s += frames[i].rms; n++; } return n ? s / n : 0; };
+  const minimo = (a, b) => { let m = Infinity; for (let i = a; i < b; i++) m = Math.min(m, frames[i].rms); return m; };
+  const clean = []; let gap = null;
   for (const s of segs) {
     const short = s.e - s.s < minF;
-    if (short && s.m == null) { brk = true; continue; }          // respiro/articulação curta: separa notas repetidas
-    if (short && clean.length) { clean[clean.length - 1].e = s.e; continue; }
-    if (clean.length && !brk && clean[clean.length - 1].m === s.m && !(onset[s.s] && s.m != null)) { clean[clean.length - 1].e = s.e; continue; }
-    clean.push({ ...s }); brk = false;
+    if (s.m == null && (s.e - s.s) <= gapF) { gap = s; continue; }   // falha curta de altura: decide abaixo
+    if (short && s.m != null && clean.length && !gap) { clean[clean.length - 1].e = s.e; continue; }
+    const last = clean[clean.length - 1];
+    if (last && s.m != null && last.m === s.m && !onset[s.s]) {
+      // mesma nota: só separa se a pausa for uma queda real de volume (articulação/respiração)
+      const queda = gap ? minimo(gap.s, gap.e) < 0.35 * Math.min(media(last.s, last.e), media(s.s, s.e)) : false;
+      if (!queda) { last.e = s.e; gap = null; continue; }
+    }
+    if (s.m != null) clean.push({ ...s });
+    gap = null;
   }
-  // c = afinação em cents (mediana dos quadros do meio da nota; + alto, - baixo)
-  return clean.filter(s => s.m != null).map(s => {
+  // ataque "escorregando" (nota curta colada, até 1 semitom de distância) faz parte da nota vizinha
+  const curtoF = Math.ceil(0.12 / fdur);
+  for (let i = 0; i < clean.length; i++) {
+    const s = clean[i], nx = clean[i + 1], pv = clean[i - 1];
+    if (s.e - s.s >= curtoF) continue;
+    if (nx && nx.s - s.e <= 2 && Math.abs(nx.m - s.m) <= 1 && nx.e - nx.s > s.e - s.s) { nx.s = s.s; clean.splice(i, 1); i--; continue; }
+    if (pv && s.s - pv.e <= 2 && Math.abs(pv.m - s.m) <= 1 && pv.e - pv.s > s.e - s.s) { pv.e = s.e; clean.splice(i, 1); i--; }
+  }
+  // c = afinação em cents em relação à nota (mediana do meio da nota; + alto, - baixo)
+  return clean.filter(s => s.m != null && s.e - s.s >= minF).map(s => {
     const a = s.s + Math.floor((s.e - s.s) * 0.2), b = Math.max(a + 1, s.e - Math.floor((s.e - s.s) * 0.2));
     const cs = [];
-    for (let i = a; i < b; i++) { const f = frames[i]; if (f && f.midi != null && Math.abs(f.midi - s.m) < 0.5) cs.push((f.midi - s.m) * 100); }
+    for (let i = a; i < b; i++) { const f = frames[i]; if (f && f.adj != null && Math.abs(f.adj - s.m) < 0.5) cs.push((f.midi - s.m) * 100); }
     cs.sort((x, y) => x - y);
     return { m: s.m, t0: s.s * fdur, t1: s.e * fdur, c: cs.length ? Math.round(cs[cs.length >> 1]) : 0 };
   });
@@ -1658,8 +1682,8 @@ async function testarMic() {
     proc.onaudioprocess = e => ch.push(new Float32Array(e.inputBuffer.getChannelData(0)));
     src.connect(proc); proc.connect(ctx.destination);
     const res = gravadorReserva(stream, ctx);
-    log('Gravando 12 s… toque uma nota longa (4 s) e depois 4 notas diferentes!');
-    for (let i = 12; i > 0; i--) { btn.textContent = `Gravando… ${i}`; await new Promise(r => setTimeout(r, 1000)); }
+    log('Gravando 5 s… toque agora!');
+    for (let i = 5; i > 0; i--) { btn.textContent = `Gravando… ${i}`; await new Promise(r => setTimeout(r, 1000)); }
     const r2 = res ? await res.parar() : null;
     try { proc.disconnect(); src.disconnect(); } catch (e) {}
     stream.getTracks().forEach(t => t.stop()); try { ctx.close(); } catch (e) {}
@@ -1669,26 +1693,10 @@ async function testarMic() {
     log(`Captura direta: ${(pcm.length / ctx.sampleRate).toFixed(1)} s · pico ${(m1.p * 100).toFixed(2)}% · média ${(m1.r * 100).toFixed(3)}% · notas ${n1}`);
     if (r2) { const m2 = med(r2.data), n2 = analyzeAudio(r2.data, r2.sr).length; log(`Gravador do Safari: ${(r2.data.length / r2.sr).toFixed(1)} s · ${r2.sr} Hz · pico ${(m2.p * 100).toFixed(2)}% · média ${(m2.r * 100).toFixed(3)}% · notas ${n2}`); }
     else log('Gravador do Safari: não entregou áudio');
-    // arquivo WAV para enviar ao Claude
-    try {
-      const d = pcm.length ? pcm : (r2 ? r2.data : null), srW = pcm.length ? ctx.sampleRate : (r2 ? r2.sr : 16000);
-      if (d && d.length) {
-        const buf = new ArrayBuffer(44 + d.length * 2), v = new DataView(buf);
-        const w = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
-        w(0, 'RIFF'); v.setUint32(4, 36 + d.length * 2, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
-        v.setUint32(24, srW, true); v.setUint32(28, srW * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, d.length * 2, true);
-        for (let i = 0; i < d.length; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, d[i])) * 32767, true);
-        const nomeMic = /airpods|bluetooth|fone|beats/i.test(tr.label || '') ? 'fone' : 'ipad';
-        const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
-        a.download = `teste-microfone-${nomeMic}.wav`; a.className = 'b b2'; a.style.cssText = 'display:block;text-align:center;margin-top:8px;text-decoration:none';
-        a.textContent = '⬇️ Baixar esta gravação (para enviar ao Claude)';
-        const old = document.getElementById('micWav'); if (old) old.remove(); a.id = 'micWav'; out.after(a);
-      }
-    } catch (e) {}
     const ok = n1 > 0 || (r2 && analyzeAudio(r2.data, r2.sr).length > 0);
     log(ok ? '✅ O microfone ouviu notas.' : (m1.p < 0.02 ? '❌ Som muito baixo: o sistema está abafando o microfone. Abra a Central de Controle, toque em "Modo do Microfone" e escolha "Espectro Amplo" (ou "Padrão"), depois teste de novo.' : '❌ Chegou som, mas sem notas reconhecíveis: provável filtro de voz. Abra a Central de Controle › Modo do Microfone › "Espectro Amplo" e teste de novo.'));
   } catch (e) { log('Erro: ' + (e.message || e)); }
-  btn.disabled = false; btn.textContent = '🔧 Testar microfone (12 s: uma nota longa e depois algumas notas)';
+  btn.disabled = false; btn.textContent = '🔧 Testar microfone (toque uma nota longa por 5 s)';
 }
 window.addEventListener('DOMContentLoaded', () => {
   const bt = document.getElementById('micTeste'); if (bt) bt.onclick = testarMic;
@@ -2112,9 +2120,10 @@ function alturaBloco(buf, sr0) {
   const fct = Math.max(1, Math.round(sr0 / 24000)), N = Math.min(2048, Math.floor(buf.length / fct));
   const x = new Float32Array(N); let e = 0;
   for (let i = 0; i < N; i++) { let s = 0; for (let j = 0; j < fct; j++) s += buf[i * fct + j]; x[i] = s / fct; e += x[i] * x[i]; }
-  if (Math.sqrt(e / N) < 0.01) return null;
+  const rmsB = Math.sqrt(e / N);
+  if (rmsB < 0.003) return null;
   const r = yin(x, 0, N, sr0 / fct, dYin);
-  return r && r.conf > 0.85 ? 69 + 12 * Math.log2(r.f / 440) : null;
+  return r && r.conf > (rmsB < 0.01 ? 0.92 : 0.85) ? 69 + 12 * Math.log2(r.f / 440) : null;
 }
 
 // ---------- Resultado da correção ----------
@@ -2497,9 +2506,9 @@ function loopAf() {
   const x = new Float32Array(N); let e = 0;
   for (let i = 0; i < N; i++) { let s = 0; for (let j = 0; j < fct; j++) s += af.buf[i * fct + j] || 0; x[i] = s / fct; e += x[i] * x[i]; }
   const rms = Math.sqrt(e / N);
-  if (rms < 0.01) { if (af.hist.length) af.hist.shift(); if (!af.hist.length) mostrarAf(null); return; }
+  if (rms < 0.003) { if (af.hist.length) af.hist.shift(); if (!af.hist.length) mostrarAf(null); return; }
   const r = yin(x, 0, N, sr0 / fct, af.d);
-  if (!r || r.conf < 0.85) return;
+  if (!r || r.conf < (rms < 0.01 ? 0.92 : 0.85)) return;
   const a4 = +$('afA4').value || 440;
   const midi = 69 + 12 * Math.log2(r.f / a4);
   af.hist.push(midi); if (af.hist.length > 7) af.hist.shift();
