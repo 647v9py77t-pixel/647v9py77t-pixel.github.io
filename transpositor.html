@@ -14,7 +14,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
 <title>Transpositor</title>
-<script>window.APP_VERSAO = '20261124155018';</script>
+<script>window.APP_VERSAO = '20261124210000';</script>
 <style>
 :root{--azul:#1f3a5f;--ouro:#f2c14e;--fundo:#f4f1ea;--card:#fff;--txt:#1d1d1f;--sub:#6b6b70;--borda:#e2ddd2;--verm:#c0392b;--b2:#e7e2d6;--b2txt:#1f3a5f;--campo:#fff;--pre:#faf8f3;--h2:#1f3a5f;
   --seta:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%236b6b70' stroke-width='2'/%3E%3C/svg%3E")}
@@ -1617,16 +1617,70 @@ function analyze(data, sr, t0, label, auto) {
 }
 function status(s) { $('status').textContent = s; }
 
+// ---------- Microfone robusto (iPhone/iPad, AirPods) ----------
+// 1) contexto de áudio com a MESMA taxa do microfone (AirPods usam 16/24 kHz; com taxa diferente o Safari entrega silêncio)
+// 2) gravador nativo (MediaRecorder) em paralelo, usado como reserva se a captura direta vier vazia ou muda
+const MIC_OPTS = { audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } };
+async function abrirMic(ctxAtual) {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('este navegador não libera o microfone; abra pelo Safari');
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia(MIC_OPTS); }
+  catch (e) {
+    if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) throw new Error('o microfone está bloqueado. Ajustes › Apps › Safari › Microfone › Permitir, e abra o app de novo');
+    throw e;
+  }
+  let sr = null; try { sr = stream.getAudioTracks()[0].getSettings().sampleRate || null; } catch (e) {}
+  const AC = window.AudioContext || window.webkitAudioContext;
+  let ctx = ctxAtual;
+  if (!ctx || (sr && Math.abs(ctx.sampleRate - sr) > 1)) {
+    if (ctx) { try { ctx.close(); } catch (e) {} }
+    try { ctx = sr ? new AC({ sampleRate: sr }) : new AC(); } catch (e) { ctx = new AC(); }
+  }
+  try { await ctx.resume(); } catch (e) {}
+  return { stream, ctx };
+}
+function gravadorReserva(stream, ctx) {
+  if (!window.MediaRecorder) return null;
+  try {
+    const tipo = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].find(t => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t));
+    const mr = new MediaRecorder(stream, tipo ? { mimeType: tipo } : undefined), ch = [];
+    const r = { t0: ctx ? ctx.currentTime : null };
+    mr.ondataavailable = e => { if (e.data && e.data.size) ch.push(e.data); };
+    mr.onstart = () => { if (ctx) r.t0 = ctx.currentTime; };
+    mr.start(250);
+    r.parar = () => new Promise(ok => { if (mr.state === 'inactive') return ok(); mr.onstop = ok; try { mr.stop(); } catch (e) { ok(); } setTimeout(ok, 2500); })
+      .then(async () => {
+        if (!ch.length) return null;
+        const blob = new Blob(ch, { type: ch[0].type || mr.mimeType || 'audio/mp4' });
+        const AC = window.AudioContext || window.webkitAudioContext, c = new AC();
+        const buf = await blob.arrayBuffer();
+        const ab = await new Promise((ok, err) => { const p = c.decodeAudioData(buf, ok, err); if (p && p.then) p.then(ok, err); });
+        let data = ab.getChannelData(0);
+        if (ab.numberOfChannels > 1) { const d2 = ab.getChannelData(1), m = new Float32Array(data.length); for (let i = 0; i < m.length; i++) m[i] = (data[i] + d2[i]) / 2; data = m; }
+        const sr = ab.sampleRate; try { c.close(); } catch (e) {}
+        return { data, sr };
+      }).catch(() => null);
+    return r;
+  } catch (e) { return null; }
+}
+function audioMudo(data, sr) {
+  if (!data || data.length < sr * 0.3) return true;
+  let p = 0; for (let i = 0; i < data.length; i += 32) { const v = Math.abs(data[i]); if (v > p) p = v; }
+  return p < 0.002;
+}
+function juntarPCM(chunks) { const len = chunks.reduce((a, c) => a + c.length, 0), d = new Float32Array(len); let o = 0; chunks.forEach(c => { d.set(c, o); o += c.length; }); return d; }
+
 // ---------- Gravação ----------
 let rec = null;
 async function toggleRec() {
   if (rec) return stopRec();
   try {
     setAudioSession('play-and-record');
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    await ctx.resume();
+    const ctx0 = new (window.AudioContext || window.webkitAudioContext)();
+    ctx0.resume();
     keepAwake(true);
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+    const { stream, ctx } = await abrirMic(ctx0);
+    const reserva = gravadorReserva(stream, ctx);
     const src = ctx.createMediaStreamSource(stream);
     const proc = ctx.createScriptProcessor(4096, 1, 1);
     const chunks = [];
@@ -1657,25 +1711,31 @@ async function toggleRec() {
       };
       sched(); timer = setInterval(sched, 500);
     }
-    rec = { ctx, stream, proc, src, chunks, countInEnd, timer, start };
+    rec = { ctx, stream, proc, src, chunks, countInEnd, timer, start, reserva };
     $('btnRec').classList.add('rec'); $('btnRec').textContent = '■ Parar';
     status(contar ? `Contagem de ${beats} tempos… depois toque.` : 'Gravando… toque!');
     if (contar) setTimeout(() => rec && status('Gravando… toque!'), countInEnd * 1000);
   } catch (e) {
-    status('Não consegui usar o microfone: ' + (e.message || e) + '. No iPhone, permita o microfone para o Safari (Ajustes › Safari › Microfone).');
-    rec = null;
+    status('Não consegui usar o microfone: ' + (e.message || e) + '.');
+    keepAwake(false); rec = null;
   }
 }
-function stopRec() {
+async function stopRec() {
   const r = rec; rec = null;
   clearInterval(r.timer); keepAwake(false);
-  r.proc.disconnect(); r.src.disconnect(); r.stream.getTracks().forEach(t => t.stop());
-  const len = r.chunks.reduce((a, c) => a + c.length, 0), data = new Float32Array(len);
-  let o = 0; r.chunks.forEach(c => { data.set(c, o); o += c.length; });
-  const sr = r.ctx.sampleRate; r.ctx.close();
   $('btnRec').classList.remove('rec'); $('btnRec').textContent = '● Gravar'; $('nivel').style.width = '0';
-  if (len < sr * 0.5) { status('Gravação curta demais.'); return; }
-  analyze(data, sr, r.countInEnd, 'Gravação');
+  let data = juntarPCM(r.chunks), sr = r.ctx.sampleRate, t0 = r.countInEnd;
+  const res = r.reserva ? await r.reserva.parar() : null;   // para o gravador antes de desligar o microfone
+  try { r.proc.disconnect(); r.src.disconnect(); } catch (e) {}
+  r.stream.getTracks().forEach(t => t.stop());
+  if (audioMudo(data, sr) && res && !audioMudo(res.data, res.sr)) {
+    data = res.data; sr = res.sr;
+    if (t0 != null && r.reserva.t0 != null) t0 = Math.max(0, t0 - (r.reserva.t0 - r.start));
+  }
+  try { r.ctx.close(); } catch (e) {}
+  if (data.length < sr * 0.5) { status('Gravação curta demais.'); return; }
+  if (audioMudo(data, sr)) { status('A gravação chegou em silêncio. Feche outros apps que usam o microfone (ligação, gravador, Bluetooth) e tente de novo; se usar AirPods, teste também sem eles.'); return; }
+  analyze(data, sr, t0, 'Gravação');
 }
 async function openAudio(file) {
   if (!file) return;
@@ -1854,10 +1914,10 @@ function agendar(ex, bpm, op) {
 // ---------- Gravação ----------
 async function iniciarGravacao() {
   audioSession('play-and-record');
-  ctx = new (window.AudioContext || window.webkitAudioContext)(); await ctx.resume();
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+  const c0 = new (window.AudioContext || window.webkitAudioContext)(); c0.resume();
+  const mic = await abrirMic(c0); ctx = mic.ctx; const stream = mic.stream;
   const src = ctx.createMediaStreamSource(stream), proc = ctx.createScriptProcessor(4096, 1, 1), chunks = [];
-  const g = { stream, src, proc, chunks, t0: null, onPitch: null };
+  const g = { stream, src, proc, chunks, t0: null, onPitch: null, reserva: gravadorReserva(stream, ctx) };
   proc.onaudioprocess = e => {
     if (!ctx) return;
     if (g.t0 == null) g.t0 = e.playbackTime != null ? e.playbackTime - e.inputBuffer.duration : ctx.currentTime - e.inputBuffer.duration;
@@ -1868,12 +1928,14 @@ async function iniciarGravacao() {
   gravando = g; manterTela(true);
   return g;
 }
-function encerrarGravacao() {
+async function encerrarGravacao() {
   const g = gravando; if (!g) return null; gravando = null;
-  g.proc.disconnect(); g.src.disconnect(); g.stream.getTracks().forEach(t => t.stop());
-  const len = g.chunks.reduce((a, c) => a + c.length, 0), data = new Float32Array(len); let o = 0;
-  g.chunks.forEach(c => { data.set(c, o); o += c.length; });
-  const sr = ctx.sampleRate, t0 = g.t0;
+  let data = juntarPCM(g.chunks), sr = ctx ? ctx.sampleRate : 48000, t0 = g.t0;
+  const res = g.reserva ? await g.reserva.parar() : null;
+  try { g.proc.disconnect(); g.src.disconnect(); } catch (e) {}
+  g.stream.getTracks().forEach(t => t.stop());
+  if (audioMudo(data, sr) && res && !audioMudo(res.data, res.sr)) { data = res.data; sr = res.sr; t0 = g.reserva.t0; }
+  if (audioMudo(data, sr)) { try { status('A gravação chegou em silêncio. Feche outros apps que usam o microfone e tente de novo; se usar AirPods, teste também sem eles.'); } catch (e) {} return null; }
   return { data, sr, t0 };
 }
 let worker = null;
@@ -2158,7 +2220,7 @@ function desenharArea(id) {
     } catch (e) { parar(); status('Não consegui usar o microfone: ' + (e.message || e) + '. No iPhone: Ajustes › Safari › Microfone › Permitir.'); }
   });
   async function finalizar() {
-    const ag = exAtual[id + '_ag'], g = encerrarGravacao(); parar();
+    const ag = exAtual[id + '_ag'], g = await encerrarGravacao(); parar();
     if (!g || !ag) return;
     status('Corrigindo…');
     const base = g.t0 != null ? g.t0 : ag.ini - 0.5;
@@ -2302,7 +2364,7 @@ function desenharOuvido(a, el) {
     }
   });
   async function responderFim() {
-    const g = encerrarGravacao(); parar(); if (!g) return;
+    const g = await encerrarGravacao(); parar(); if (!g) return;
     status('Conferindo…');
     const tocadas = await analisar(g.data, g.sr);
     const ex = exFrase(), { notas: esp } = exercicioTempos(ex, 76);
@@ -2323,8 +2385,8 @@ function afinadorLigar() {
   (async () => {
     try {
       audioSession('play-and-record');
-      const c = new (window.AudioContext || window.webkitAudioContext)(); await c.resume();
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+      const c0 = new (window.AudioContext || window.webkitAudioContext)(); c0.resume();
+      const { stream, ctx: c } = await abrirMic(c0);
       const src = c.createMediaStreamSource(stream), an = c.createAnalyser(); an.fftSize = 4096; src.connect(an);
       af = { c, stream, an, buf: new Float32Array(an.fftSize), hist: [], d: new Float32Array(1024), ult: 0 };
       $('afBtn').textContent = '■ Desligar afinador'; $('afBtn').classList.add('ativo'); manterTela(true);
@@ -2800,12 +2862,12 @@ const estudoLivro = (() => {
   async function metronomo(gravar) {
     if (ctx) { if (gravando) return finalizar(); return parar(); }
     audioSession(gravar ? 'play-and-record' : 'playback');
-    ctx = new (window.AudioContext || window.webkitAudioContext)(); await ctx.resume();
+    ctx = new (window.AudioContext || window.webkitAudioContext)(); ctx.resume();
     if (gravar) {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+        const mic = await abrirMic(ctx); ctx = mic.ctx; const stream = mic.stream;
         const src = ctx.createMediaStreamSource(stream), proc = ctx.createScriptProcessor(4096, 1, 1), chunks = [];
-        gravando = { stream, src, proc, chunks, t0: null };
+        gravando = { stream, src, proc, chunks, t0: null, reserva: gravadorReserva(stream, ctx) };
         proc.onaudioprocess = e => { if (gravando.t0 == null) gravando.t0 = ctx.currentTime - e.inputBuffer.duration; chunks.push(new Float32Array(e.inputBuffer.getChannelData(0))); };
         src.connect(proc); proc.connect(ctx.destination);
       } catch (e) { alert('Não consegui usar o microfone: ' + (e.message || e)); ctx.close(); ctx = null; return; }
@@ -2825,11 +2887,12 @@ const estudoLivro = (() => {
   }
   async function finalizar() {
     const g = gravando; if (!g) return parar();
-    const sr = ctx.sampleRate, bpm = +bpmEl().value || 70;
-    const len = g.chunks.reduce((a, c) => a + c.length, 0), data = new Float32Array(len); let o = 0;
-    g.chunks.forEach(c => { data.set(c, o); o += c.length; });
-    const fase = g.clique0 - g.t0;
+    let sr = ctx.sampleRate; const bpm = +bpmEl().value || 70;
+    let data = juntarPCM(g.chunks), fase = g.clique0 - g.t0;
+    const resv = g.reserva ? await g.reserva.parar() : null;
+    if (audioMudo(data, sr) && resv && !audioMudo(resv.data, resv.sr)) { data = resv.data; sr = resv.sr; fase = g.clique0 - g.reserva.t0; }
     parar();
+    if (audioMudo(data, sr)) { const rr = $('lResultado'); rr.hidden = false; rr.innerHTML = 'A gravação chegou em silêncio. Feche outros apps que usam o microfone e tente de novo; se usar AirPods, teste também sem eles.'; return; }
     const res = $('lResultado'); res.hidden = false; res.innerHTML = 'Analisando…';
     if (!worker) worker = new Worker(URL.createObjectURL(new Blob([$('core').textContent + '\nonmessage = e => postMessage(analyzeAudio(e.data.data, e.data.sr));'], { type: 'text/javascript' })));
     const notas = await new Promise(ok => { worker.onmessage = e => ok(e.data); worker.postMessage({ data, sr }, [data.buffer]); });
