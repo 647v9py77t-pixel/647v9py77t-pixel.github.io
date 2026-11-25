@@ -14,7 +14,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
 <title>Transpositor</title>
-<script>window.APP_VERSAO = '20261124221500';</script>
+<script>window.APP_VERSAO = '20261125110849';</script>
 <style>
 :root{--azul:#1f3a5f;--ouro:#f2c14e;--fundo:#f4f1ea;--card:#fff;--txt:#1d1d1f;--sub:#6b6b70;--borda:#e2ddd2;--verm:#c0392b;--b2:#e7e2d6;--b2txt:#1f3a5f;--campo:#fff;--pre:#faf8f3;--h2:#1f3a5f;
   --seta:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%236b6b70' stroke-width='2'/%3E%3C/svg%3E")}
@@ -82,6 +82,11 @@ body.so-pane .cfg,body.so-pane #res{display:none!important}
 .barra{height:10px;background:var(--b2);border-radius:5px;overflow:hidden;margin:10px 0 4px}.barra i{display:block;height:100%;background:#2e8b57;border-radius:5px;transition:width .3s}
 .niveis{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.niveis span{font-size:12px;background:var(--b2);color:var(--b2txt);border-radius:20px;padding:4px 9px}
 .est-area{padding:0}
+.est-area.fora>summary{opacity:.6}
+.tempo-dia{display:flex;align-items:center;gap:6px;margin:10px 0 4px;font-size:14px}
+.foco-txt{font-size:13px;margin:6px 0}
+.treino-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;margin:4px 0 8px;border-radius:10px;background:rgba(255,170,0,.15);font-size:13px;font-weight:600}
+.btns.depois{margin-top:10px}
 .est-area>summary{display:flex;align-items:center;gap:8px;padding:14px;cursor:pointer;list-style:none;min-height:52px}
 .est-area>summary::-webkit-details-marker{display:none}
 .est-area>summary .nm{flex:1;font-weight:600}.est-area>summary .mt{font-size:12px;color:var(--sub);white-space:nowrap}
@@ -1422,6 +1427,61 @@ function registrarNota(P, area, nota, hoje, rampa) {
   if (passou(nota)) marcarFeito(P, area, hoje);
   return msg;
 }
+// ---------- Plano do dia: cabe no tempo do Lucas (45 ou 60 min) e dá mais tempo ao que está mais fraco ----------
+// Força da área = média das últimas 4 notas (null = ainda sem nota).
+function forcaArea(P, id) {
+  const h = P.hist.filter(x => x.a === id).slice(-4);
+  return h.length ? h.reduce((s, x) => s + x.n, 0) / h.length : null;
+}
+function planoDoDia(P, hojeN, total) {
+  total = total === 45 ? 45 : 60;
+  const aq = ORDEM_MIN.aquec;
+  let ids = AREAS.map(a => a.id).filter(id => id !== 'aquec');
+  const forca = Object.fromEntries(ids.map(id => [id, forcaArea(P, id)]));
+  const fraq = id => forca[id] == null ? 0.5 : Math.max(0, Math.min(1, (95 - forca[id]) / 45));
+  const fora = [];
+  if (total === 45) {
+    // tira o repertório livre e a área opcional mais forte (empate: revezamento pelo dia)
+    fora.push('repert');
+    const opc = ['longas', 'artic', 'escalas', 'ouvido'];
+    const rod = opc.map((id, i) => ({ id, k: (forca[id] == null ? 70 : forca[id]) + ((i + hojeN) % opc.length) * 0.5 }));
+    rod.sort((a, b) => b.k - a.k); fora.push(rod[0].id);
+    ids = ids.filter(id => !fora.includes(id));
+  }
+  // minutos proporcionais: base × (0,7 a 1,3 conforme a fraqueza), escalados para caber no total
+  const peso = Object.fromEntries(ids.map(id => [id, ORDEM_MIN[id] * (0.7 + 0.6 * fraq(id))]));
+  const soma = ids.reduce((s, id) => s + peso[id], 0), resto = total - aq;
+  const min = { aquec: aq };
+  ids.forEach(id => { min[id] = Math.max(3, Math.round(peso[id] / soma * resto)); });
+  let dif = resto - ids.reduce((s, id) => s + min[id], 0);
+  const ord = [...ids].sort((a, b) => fraq(b) - fraq(a));
+  for (let i = 0; dif !== 0 && i < 50; i++) { const id = ord[i % ord.length]; if (dif > 0) { min[id]++; dif--; } else if (min[id] > 3) { min[id]--; dif++; } }
+  // foco: as 2 áreas mais fracas que já têm nota e ainda não passam de 85
+  const foco = ids.filter(id => forca[id] != null && forca[id] <= 85).sort((a, b) => forca[a] - forca[b]).slice(0, 2);
+  return { total, min, fora, foco, ids: ['aquec', ...ids] };
+}
+// Trecho difícil: os compassos (até 2 seguidos) com mais erros, tocados 2 vezes com 1 compasso de descanso.
+// notasRes = r.notas do avaliar (alinhadas às notas sem pausa de exercicioTempos).
+function trechoDificil(ex, notasRes, bpmUsado) {
+  const beats = ex.beats || 4, M = beats * 4;
+  const { notas } = exercicioTempos(ex, ex.bpm);
+  const ruim = n => n && (n.st !== 'ok' || Math.abs(n.c || 0) > 15);
+  const erros = {};
+  notas.forEach((n, i) => { if (ruim(notasRes[i])) { const c = Math.floor(n.s / M); erros[c] = (erros[c] || 0) + 1; } });
+  const cs = Object.keys(erros).map(Number); if (!cs.length) return null;
+  let melhor = cs[0], mx = -1;
+  cs.forEach(c => { const v = (erros[c] || 0) + (erros[c + 1] || 0); if (v > mx) { mx = v; melhor = c; } });
+  const ini = melhor, fim = erros[melhor + 1] ? melhor + 1 : melhor;
+  const sel = []; let t = 0;
+  ex.notas.forEach(x => { const c = Math.floor(t / M); if (c >= ini && c <= fim) sel.push({ ...x }); t += x.d; });
+  if (!sel.some(x => x.w != null)) return null;
+  let dur = sel.reduce((s, x) => s + x.d, 0);
+  const comp = (fim - ini + 1) * M; if (dur < comp) sel.push({ w: null, d: comp - dur });
+  const pausa = { w: null, d: M };
+  const bpm = Math.max(40, Math.round((bpmUsado || ex.bpm) * 0.85));
+  return { ...ex, titulo: `🎯 Trecho difícil (compasso${fim > ini ? 's' : ''} ${ini + 1}${fim > ini ? '–' + (fim + 1) : ''})`, notas: [...sel, pausa, ...sel.map(x => ({ ...x }))], bpm, bpmIni: bpm, semRampa: true, _treino: true,
+    nota: 'Só o pedaço que deu mais erro, mais devagar e 2 vezes seguidas. Não conta nota: quando sair limpo, volte ao exercício completo.' };
+}
 function marcarFeito(P, area, hoje) { const f = P.feito[hoje] || (P.feito[hoje] = []); if (!f.includes(area)) f.push(area); }
 function sequenciaDias(P, hojeN) {
   let n = 0;
@@ -1478,7 +1538,7 @@ function dicaValvula(w, cents) {
   return { valvulas: v, texto: t };
 }
 
-if (typeof module !== 'undefined') module.exports = { desafiosDaSemana, AREAS, NIVEL_MAX, fraseOuvido, exercicioModelo, exercicioTempos, progressoPadrao, registrarNota, sequenciaDias, dicaValvula, DEDILHADO, NOMES_PT, diaNum, nomeEscrito };
+if (typeof module !== 'undefined') module.exports = { planoDoDia, forcaArea, trechoDificil, desafiosDaSemana, AREAS, NIVEL_MAX, fraseOuvido, exercicioModelo, exercicioTempos, progressoPadrao, registrarNota, sequenciaDias, dicaValvula, DEDILHADO, NOMES_PT, diaNum, nomeEscrito };
 </script>
 <script>// ===== Interface =====
 const $ = id => document.getElementById(id);
@@ -2126,6 +2186,22 @@ function alturaBloco(buf, sr0) {
   return r && r.conf > (rmsB < 0.01 ? 0.92 : 0.85) ? 69 + 12 * Math.log2(r.f / 440) : null;
 }
 
+// Botões depois da correção: menos toques entre uma tentativa e outra
+function acoesDepois(el, r, ex, area) {
+  const det = $('est_' + area); if (!det) return;
+  const ok = r.nota > 80;
+  const tr = !ex._treino && !ok && area !== 'aquec' ? trechoDificil(ex, r.notas, ex._bpmUsado) : null;
+  el.insertAdjacentHTML('beforeend', `<div class="btns depois">
+    ${tr ? '<button class="b" data-d="trecho">🎯 Treinar só o trecho difícil</button>' : ''}
+    <button class="b ${ok || tr ? 'b2' : ''}" data-d="denovo">🔁 Gravar de novo</button>
+    ${ok && !ex._treino ? '<button class="b" data-d="prox">➡️ Próxima parte</button>' : ''}</div>`);
+  el.querySelectorAll('[data-d]').forEach(b => b.onclick = () => {
+    const d = b.dataset.d;
+    if (d === 'denovo') { const g = det.querySelector('[data-a=gravar]'); if (g) { det.scrollIntoView({ behavior: 'smooth', block: 'start' }); g.click(); } }
+    else if (d === 'trecho') { desenharArea(area, tr); det.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    else if (d === 'prox') abrirProxima(area);
+  });
+}
 // ---------- Resultado da correção ----------
 function mostrarCorrecao(el, r, ex, area, pt) {
   if (pt) { colorirPartitura(pt.host, pt.mapa, ex, r.notas); pt.legenda.hidden = false; }
@@ -2150,6 +2226,11 @@ function mostrarCorrecao(el, r, ex, area, pt) {
     <div class="regra80">${r.nota > 80 ? '✅ Acima de 80: conta para avançar' : '🔁 Precisa passar de 80 para avançar'}</div>
     <div class="metr"><span>Notas certas <b>${pct(r.pNotas)}</b></span><span>Ritmo <b>${pct(r.pRitmo)}</b></span><span>Afinação <b>${pct(r.pAfin)}</b></span><span>Média <b>${r.mediaC > 0 ? '+' : ''}${r.mediaC}¢</b></span></div>
     <div class="chips">${chips}</div><ul class="dicas">${dicas.map(d => `<li>${esc(d)}</li>`).join('')}</ul>`;
+  acoesDepois(el, r, ex, area);
+  if (ex._treino) {   // trecho difícil: só treino, não mexe em nível, andamento nem parte do dia
+    el.insertAdjacentHTML('afterbegin', `<p class="subiu ${r.nota > 80 ? '' : 'nao'}">${r.nota > 80 ? 'Trecho limpo! Agora volte ao exercício completo e grave valendo nota.' : 'Repita o trecho mais algumas vezes, devagar, até sair limpo.'}</p>`);
+    return;
+  }
   const rampa = ex._bpmUsado && !ex.semRampa && P.rampaOn !== false ? { bpm: ex._bpmUsado, meta: ex.bpm } : null;
   const msg = registrarNota(P, area, r.nota, hoje, rampa); salvar(); desenharCabecalho();
   if (area === 'aquec') concluirAquecimento();   // aquecimento vale pelo fato de ter tocado, não pela nota
@@ -2175,13 +2256,26 @@ function bpmAtual(area, ex) {
 function usaFone() { try { return localStorage.getItem('tp_fone') !== '0'; } catch (e) { return true; } }
 const exAtual = {};
 function gerarEx(a) { return a.gerar(P.nivel[a.id], hojeN); }
+// Plano do dia (45 ou 60 min): calculado ao montar a aba e ao trocar o tempo, para não mudar no meio do estudo
+let PD = null;
+const planoHoje = () => PD || (PD = planoDoDia(P, hojeN, P.tempoDia === 45 ? 45 : 60));
+const minDe = a => planoHoje().min[a.id] || a.min;
+const foraHoje = id => planoHoje().fora.includes(id);
 function desenharCabecalho() {
-  const feitos = (P.feito[hoje] || []).length, total = AREAS.length;
+  const pd = planoHoje(), f = P.feito[hoje] || [];
+  const feitos = pd.ids.filter(id => f.includes(id)).length, total = pd.ids.length;
+  const minFeitos = pd.ids.filter(id => f.includes(id)).reduce((s, id) => s + pd.min[id], 0);
   const seq = sequenciaDias(P, hojeN);
-  const min = AREAS.reduce((s, a) => s + a.min, 0);
-  $('estHoje').innerHTML = `<div class="est-top"><div><b>Estudo de hoje</b><br><small>${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })} · cerca de ${min} min</small></div><div class="fogo" title="dias seguidos">🔥 ${seq}</div></div>
-    <div class="barra"><i style="width:${Math.round(feitos / total * 100)}%"></i></div><small>${feitos} de ${total} partes concluídas hoje</small>
+  const nomeA = id => { const a = AREAS.find(x => x.id === id); return a ? a.icone + ' ' + a.nome.split(' (')[0].split(':')[0] : id; };
+  $('estHoje').innerHTML = `<div class="est-top"><div><b>Estudo de hoje</b><br><small>${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</small></div><div class="fogo" title="dias seguidos">🔥 ${seq}</div></div>
+    <div class="tempo-dia">Hoje tenho <button class="b mini ${pd.total === 45 ? '' : 'b2'}" data-td="45">45 min</button><button class="b mini ${pd.total === 60 ? '' : 'b2'}" data-td="60">60 min</button></div>
+    ${pd.foco.length ? `<p class="foco-txt">📌 Foco de hoje: <b>${pd.foco.map(id => esc(nomeA(id))).join('</b> e <b>')}</b> (mais tempo onde a nota está mais baixa).</p>` : ''}
+    <div class="barra"><i style="width:${Math.round(feitos / total * 100)}%"></i></div><small>${feitos} de ${total} partes · ${minFeitos} de ${pd.total} min. Pode parar quando precisar: o que fez fica salvo e volta daqui.</small>
     <div class="niveis">${AREAS.filter(a => a.gerar || a.tipo === 'ouvido').map(a => `<span>${a.icone} ${esc(a.nome.split(' (')[0].split(':')[0])} <b>${P.nivel[a.id]}</b></span>`).join('')}</div>`;
+  $('estHoje').querySelectorAll('[data-td]').forEach(b => b.onclick = () => {
+    const v = +b.dataset.td; if (v === pd.total) return;
+    P.tempoDia = v; salvar(); PD = null; parar(); montar();
+  });
   desenharDesafios();
 }
 function desenharDesafios() {
@@ -2224,14 +2318,18 @@ window.irAquecimento = irAquecimento;
 function resumoHTML(a) {
   const feito = (P.feito[hoje] || []).includes(a.id);
   if (a.id !== 'aquec' && !feito && !aquecido()) return `<span class="ck">🔒</span><span class="nm">${a.icone} ${esc(a.nome)}</span><span class="mt">depois do aquecimento</span>`;
-  return `<span class="ck">${feito ? '✅' : '⬜'}</span><span class="nm">${a.icone} ${esc(a.nome)}</span><span class="mt">${a.min} min${a.tipo === 'timer' ? '' : ' · nív. ' + P.nivel[a.id]}</span>`;
+  const niv = a.tipo === 'timer' ? '' : ' · nív. ' + P.nivel[a.id];
+  if (foraHoje(a.id) && !feito) return `<span class="ck">➕</span><span class="nm">${a.icone} ${esc(a.nome)}</span><span class="mt">extra · fora do plano de hoje${niv}</span>`;
+  const foco = planoHoje().foco.includes(a.id) ? '📌 ' : '';
+  return `<span class="ck">${feito ? '✅' : '⬜'}</span><span class="nm">${foco}${a.icone} ${esc(a.nome)}</span><span class="mt">${minDe(a)} min${niv}</span>`;
 }
 function montar() {
   const box = $('estAreas'); box.innerHTML = '';
   let abriu = false;
-  AREAS.forEach(a => {
-    const d = document.createElement('details'); d.className = 'card est-area'; d.id = 'est_' + a.id;
-    if (!abriu && !(P.feito[hoje] || []).includes(a.id)) { d.open = true; abriu = true; }
+  planoHoje();
+  [...AREAS.filter(a => !foraHoje(a.id)), ...AREAS.filter(a => foraHoje(a.id))].forEach(a => {
+    const d = document.createElement('details'); d.className = 'card est-area' + (foraHoje(a.id) ? ' fora' : ''); d.id = 'est_' + a.id;
+    if (!abriu && !foraHoje(a.id) && !(P.feito[hoje] || []).includes(a.id)) { d.open = true; abriu = true; }
     d.innerHTML = `<summary>${resumoHTML(a)}</summary><div class="est-corpo"></div>`;
     d.addEventListener('toggle', () => { if (d.open && !d.dataset.ok) desenharArea(a.id); });
     box.appendChild(d);
@@ -2245,7 +2343,8 @@ function nivelHTML(a) {
 function ligarNivel(el, a) {
   el.querySelectorAll('[data-n]').forEach(b => b.onclick = () => { P.nivel[a.id] = Math.max(1, Math.min(NIVEL_MAX, P.nivel[a.id] + +b.dataset.n)); P.seguidas[a.id] = 0; salvar(); desenharArea(a.id); desenharCabecalho(); });
 }
-function desenharArea(id) {
+// exTreino: trecho difícil (gerado por trechoDificil) no lugar do exercício completo; não conta nota
+function desenharArea(id, exTreino) {
   parar();
   const a = AREAS.find(x => x.id === id), det = $('est_' + id), el = det.querySelector('.est-corpo');
   det.dataset.ok = '1'; atualizarResumo(id);
@@ -2258,8 +2357,8 @@ function desenharArea(id) {
   }
   if (a.tipo === 'timer') return desenharTimer(a, el);
   if (a.tipo === 'ouvido') return desenharOuvido(a, el);
-  const ex = gerarEx(a); exAtual[id] = ex;
-  el.innerHTML = `<p class="ref">${esc(a.ref)}</p>${nivelHTML(a)}<h3>${esc(ex.titulo)}</h3><p class="note">${esc(a.dica)}</p>
+  const ex = exTreino || gerarEx(a); exAtual[id] = ex;
+  el.innerHTML = `${exTreino ? '<div class="treino-bar"><span>🎯 Treino do trecho (não conta nota)</span><button class="b b2 mini" data-volta>↩ Exercício completo</button></div>' : `<p class="ref">${esc(a.ref)}</p>${nivelHTML(a)}`}<h3>${esc(ex.titulo)}</h3><p class="note">${esc(a.dica)}</p>
     <div class="score est-score" id="sc_${id}"></div>
     <div class="ao-vivo" hidden><div class="av-nota">—</div><div class="av-meio"><div class="av-barra"><i></i><b></b></div><div class="av-txt">Afinação ao vivo</div></div></div>
     <div class="legenda" hidden><span class="lg ok">certa</span><span class="lg am">desafinada / fora do tempo</span><span class="lg er">errada / faltou</span></div>
@@ -2281,6 +2380,7 @@ function desenharArea(id) {
   if (id === 'aquec') prepararAquecimento(a, el);
   ABCJS.renderAbc('sc_' + id, toABC(writtenView(exercicioModelo(ex), 'Bb', 0, 0), ex.titulo, 'Trompete em Si♭'), { responsive: 'resize', paddingleft: 0, paddingright: 0, paddingtop: 0, add_classes: true });
   ligarNivel(el, a);
+  const vb = el.querySelector('[data-volta]'); if (vb) vb.onclick = () => desenharArea(id);
   const q = s => el.querySelector(s), status = s => q('.est-status').textContent = s;
   const host = $('sc_' + id), mapa = mapaPartitura(host, ex);
   const pt = { host, mapa, legenda: q('.legenda') };
@@ -2397,20 +2497,22 @@ function sirene(el, bt) {
 function desenharTimer(a, el) {
   const itens = a.texto(P.nivel[a.id] || 3);
   el.innerHTML = `<p class="ref">${esc(a.ref)}</p><ol class="passos">${itens.map(t => `<li>${esc(t)}</li>`).join('')}</ol>
-    <div class="timer" id="tm_${a.id}">${a.min}:00</div>
-    <div class="btns"><button class="b est-bt" data-a="ini">▶ Iniciar ${a.min} min</button><button class="b b2" data-a="ok">✅ Concluído</button></div>`;
+    <div class="timer" id="tm_${a.id}">${minDe(a)}:00</div>
+    <div class="btns"><button class="b est-bt" data-a="ini">▶ Iniciar ${minDe(a)} min</button><button class="b b2" data-a="ok">✅ Concluído</button></div>`;
   let fimT = null, iv = null;
   const tm = el.querySelector('.timer');
   const concluir = () => { clearInterval(iv); marcarFeito(P, a.id, hoje); salvar(); atualizarResumo(a.id); desenharCabecalho(); toastE('Parte concluída'); abrirProxima(a.id); };
   el.querySelector('[data-a=ini]').onclick = () => {
-    clearInterval(iv); fimT = Date.now() + a.min * 60000; manterTela(true);
+    clearInterval(iv); fimT = Date.now() + minDe(a) * 60000; manterTela(true);
     iv = setInterval(() => { const s = Math.max(0, Math.round((fimT - Date.now()) / 1000)); tm.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; if (!s) { manterTela(false); concluir(); } }, 500);
   };
   el.querySelector('[data-a=ok]').onclick = concluir;
 }
 function abrirProxima(id) {
-  const i = AREAS.findIndex(a => a.id === id), prox = AREAS.slice(i + 1).find(a => !(P.feito[hoje] || []).includes(a.id));
+  const pend = a => !foraHoje(a.id) && !(P.feito[hoje] || []).includes(a.id);
+  const i = AREAS.findIndex(a => a.id === id), prox = AREAS.slice(i + 1).find(pend) || AREAS.slice(0, i).find(pend);
   if (prox) { const d = $('est_' + prox.id); $('est_' + id).open = false; d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+  else toastE('Plano de hoje completo! 🎺 Se ainda tiver tempo, os extras estão no fim da lista.');
 }
 
 // ---------- Tocar de ouvido ----------
@@ -2551,7 +2653,7 @@ window.addEventListener('DOMContentLoaded', () => {
   $('afA4').onchange = () => { try { localStorage.setItem('tp_a4', $('afA4').value); } catch (e) {} };
   try { const a = localStorage.getItem('tp_a4'); if (a) $('afA4').value = a; } catch (e) {}
   mostrarAf(null);
-  $('estZerar').onclick = () => { if (confirm('Zerar todo o progresso dos estudos (níveis e histórico)?')) { P = progressoPadrao(); salvar(); montar(); } };
+  $('estZerar').onclick = () => { if (confirm('Zerar todo o progresso dos estudos (níveis e histórico)?')) { P = progressoPadrao(); PD = null; salvar(); montar(); } };
   document.addEventListener('visibilitychange', () => { if (document.hidden) { parar(); afinadorDesligar(); } });
   window.estudoSaiu = () => { parar(); afinadorDesligar(); };
 });
