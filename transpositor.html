@@ -14,7 +14,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
 <title>Transpositor</title>
-<script>window.APP_VERSAO = '20261124211500';</script>
+<script>window.APP_VERSAO = '20261124214000';</script>
 <style>
 :root{--azul:#1f3a5f;--ouro:#f2c14e;--fundo:#f4f1ea;--card:#fff;--txt:#1d1d1f;--sub:#6b6b70;--borda:#e2ddd2;--verm:#c0392b;--b2:#e7e2d6;--b2txt:#1f3a5f;--campo:#fff;--pre:#faf8f3;--h2:#1f3a5f;
   --seta:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%236b6b70' stroke-width='2'/%3E%3C/svg%3E")}
@@ -343,6 +343,8 @@ body.leitor-aberto{overflow:hidden}
     <div class="row" style="margin-top:12px">
       <label>Microfone (vale para o app todo)<select id="micSel"><option value="auto">Automático: microfone do iPad/iPhone</option></select></label>
     </div>
+    <button class="b b2" id="micTeste" style="width:100%;margin-top:10px">🔧 Testar microfone (toque uma nota longa por 5 s)</button>
+    <pre id="micDiag" hidden style="white-space:pre-wrap;font-size:13px;margin-top:8px"></pre>
     <p class="note" id="micInfo">Com AirPods, o microfone deles corta o som do trompete (filtro de voz). Deixe no microfone do aparelho e use os AirPods só para ouvir.</p>
     <div class="row" style="margin-top:12px">
       <label>Lá de referência (Hz)<select id="afA4"><option>438</option><option>439</option><option selected>440</option><option>441</option><option>442</option><option>443</option></select></label>
@@ -1638,7 +1640,42 @@ async function preencherMics() {
     if (info && window.__micAtual) info.textContent = 'Em uso agora: ' + window.__micAtual + (MIC_BT.test(window.__micAtual) ? ' — microfone de fone corta o trompete; escolha o do aparelho.' : '');
   } catch (e) {}
 }
+async function testarMic() {
+  const out = document.getElementById('micDiag'), btn = document.getElementById('micTeste');
+  out.hidden = false; btn.disabled = true;
+  const L = []; const log = t => { L.push(t); out.textContent = L.join('\n'); };
+  try { if (typeof afinadorDesligar === 'function' && typeof af !== 'undefined' && af) afinadorDesligar(); } catch (e) {}
+  try {
+    try { if (navigator.audioSession) navigator.audioSession.type = 'play-and-record'; } catch (e) {}
+    log('Versão: ' + (window.APP_VERSAO || '?'));
+    const c0 = new (window.AudioContext || window.webkitAudioContext)(); c0.resume();
+    const { stream, ctx } = await abrirMic(c0);
+    const tr = stream.getAudioTracks()[0], st = tr.getSettings ? tr.getSettings() : {};
+    log('Microfone: ' + (tr.label || '(sem nome)'));
+    log(`Taxa: mic ${st.sampleRate || '?'} Hz · app ${ctx.sampleRate} Hz · estado ${ctx.state}`);
+    log(`Filtros do sistema: eco=${st.echoCancellation} ruído=${st.noiseSuppression} ganho=${st.autoGainControl}`);
+    const src = ctx.createMediaStreamSource(stream), proc = ctx.createScriptProcessor(4096, 1, 1), ch = [];
+    proc.onaudioprocess = e => ch.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+    src.connect(proc); proc.connect(ctx.destination);
+    const res = gravadorReserva(stream, ctx);
+    log('Gravando 5 s… toque agora!');
+    for (let i = 5; i > 0; i--) { btn.textContent = `Gravando… ${i}`; await new Promise(r => setTimeout(r, 1000)); }
+    const r2 = res ? await res.parar() : null;
+    try { proc.disconnect(); src.disconnect(); } catch (e) {}
+    stream.getTracks().forEach(t => t.stop()); try { ctx.close(); } catch (e) {}
+    const med = (d) => { let p = 0, e = 0; for (let i = 0; i < d.length; i++) { const v = Math.abs(d[i]); if (v > p) p = v; e += d[i] * d[i]; } return { p, r: Math.sqrt(e / (d.length || 1)) }; };
+    const pcm = juntarPCM(ch), m1 = med(pcm);
+    const n1 = pcm.length > ctx.sampleRate ? analyzeAudio(pcm, ctx.sampleRate).length : 0;
+    log(`Captura direta: ${(pcm.length / ctx.sampleRate).toFixed(1)} s · pico ${(m1.p * 100).toFixed(2)}% · média ${(m1.r * 100).toFixed(3)}% · notas ${n1}`);
+    if (r2) { const m2 = med(r2.data), n2 = analyzeAudio(r2.data, r2.sr).length; log(`Gravador do Safari: ${(r2.data.length / r2.sr).toFixed(1)} s · ${r2.sr} Hz · pico ${(m2.p * 100).toFixed(2)}% · média ${(m2.r * 100).toFixed(3)}% · notas ${n2}`); }
+    else log('Gravador do Safari: não entregou áudio');
+    const ok = n1 > 0 || (r2 && analyzeAudio(r2.data, r2.sr).length > 0);
+    log(ok ? '✅ O microfone ouviu notas.' : (m1.p < 0.02 ? '❌ Som muito baixo: o sistema está abafando o microfone. Abra a Central de Controle, toque em "Modo do Microfone" e escolha "Espectro Amplo" (ou "Padrão"), depois teste de novo.' : '❌ Chegou som, mas sem notas reconhecíveis: provável filtro de voz. Abra a Central de Controle › Modo do Microfone › "Espectro Amplo" e teste de novo.'));
+  } catch (e) { log('Erro: ' + (e.message || e)); }
+  btn.disabled = false; btn.textContent = '🔧 Testar microfone (toque uma nota longa por 5 s)';
+}
 window.addEventListener('DOMContentLoaded', () => {
+  const bt = document.getElementById('micTeste'); if (bt) bt.onclick = testarMic;
   const sel = document.getElementById('micSel'); if (!sel) return;
   sel.onchange = () => { try { localStorage.setItem('tp_mic', sel.value); } catch (e) {} if (typeof afinadorDesligar === 'function' && typeof af !== 'undefined' && af) { afinadorDesligar(); } };
   preencherMics();
