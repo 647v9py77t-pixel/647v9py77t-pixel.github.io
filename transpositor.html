@@ -14,7 +14,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
 <title>Transpositor</title>
-<script>window.APP_VERSAO = '20261127172552';</script>
+<script>window.APP_VERSAO = '20261127201931';</script>
 <style>
 :root{--azul:#1f3a5f;--ouro:#f2c14e;--fundo:#f4f1ea;--card:#fff;--txt:#1d1d1f;--sub:#6b6b70;--borda:#e2ddd2;--verm:#c0392b;--b2:#e7e2d6;--b2txt:#1f3a5f;--campo:#fff;--pre:#faf8f3;--h2:#1f3a5f;
   --seta:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%236b6b70' stroke-width='2'/%3E%3C/svg%3E")}
@@ -212,6 +212,9 @@ body.leitor-aberto{overflow:hidden}
 #leitor.culto #lPaginas{scroll-snap-type:y mandatory;padding:8px 0 0}
 #leitor.culto .l-folha{scroll-snap-align:start;scroll-margin-top:8px}
 #leitor.culto .l-tit{font-size:15px}
+.surd-chk{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:15px;cursor:pointer}
+.surd-chk input{width:22px;height:22px;margin:0}
+.surd-card .note{margin:6px 0 0}
 .ct-busca{font-size:20px!important;padding:12px 14px!important}
 .ct-nuvem{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px;margin:6px 0;padding:6px 10px;border-radius:10px;background:rgba(66,133,244,.10)}
 .ct-nuvem span{flex:1;min-width:160px}
@@ -290,6 +293,7 @@ body.leitor-aberto{overflow:hidden}
   </div>
 
   <section class="pane" id="p_estudo">
+    <div class="card surd-card"><label class="surd-chk"><input type="checkbox" class="surdinaChk"> 🔇 <b>Estou com surdina</b> <small>(wah-wah / Harmon, a "bubble" de alumínio)</small></label><p class="note surd-info" hidden>Modo surdina ligado: o app aceita o som mais baixo, não conta erro de oitava causado pela surdina e avalia a afinação pela sua constância (a surdina deixa todas as notas mais altas). Desligue quando tirar a surdina.</p></div>
     <div class="card" id="estHoje"></div>
     <div class="card" id="estEtapa"></div>
     <div class="card" id="estDesafios"></div>
@@ -397,6 +401,7 @@ body.leitor-aberto{overflow:hidden}
     <div class="af-valv" id="afVal"></div>
     <p class="af-dica" id="afDica"></p>
     <button class="b" id="afBtn" style="width:100%">🎤 Ligar afinador</button>
+    <div class="surd-card" style="margin-top:10px"><label class="surd-chk"><input type="checkbox" class="surdinaChk"> 🔇 <b>Estou com surdina</b> <small>(wah-wah / Harmon, a "bubble" de alumínio)</small></label><p class="note surd-info" hidden>Com surdina o afinador mostra a nota certa, mas os cents ficam mais altos que sem ela. Para afinar o trompete (bombas), tire a surdina.</p></div>
     <div class="row" style="margin-top:12px">
       <label>Microfone (vale para o app todo)<select id="micSel"><option value="auto">Automático: microfone do iPad/iPhone</option></select></label>
     </div>
@@ -881,6 +886,8 @@ function transporTexto(texto, modo, tomOrigem, st) {
 }
 
 // ---------- Áudio: detecção de altura (YIN) e segmentação ----------
+// Modo surdina (wah-wah / Harmon): opção do usuário, desligada por padrão. Desligada, nada muda na análise.
+function surdinaOn() { try { return typeof localStorage !== 'undefined' && localStorage.getItem('tp_surdina') === '1'; } catch (e) { return false; } }
 function downsample(data, sr) {
   const fct = Math.max(1, Math.round(sr / 22050));
   if (fct === 1) return { x: data, sr };
@@ -888,7 +895,7 @@ function downsample(data, sr) {
   for (let i = 0; i < out.length; i++) { let s = 0; for (let j = 0; j < fct; j++) s += data[i * fct + j]; out[i] = s / fct; }
   return { x: out, sr: sr / fct };
 }
-function yin(buf, off, N, sr, d) {
+function yin(buf, off, N, sr, d, surd) {
   const W = N >> 1;
   for (let t = 1; t < W; t++) { let s = 0; for (let i = 0; i < W; i++) { const v = buf[off + i] - buf[off + i + t]; s += v * v; } d[t] = s; }
   let run = 0; d[0] = 1;
@@ -904,7 +911,7 @@ function yin(buf, off, N, sr, d) {
   }
   return null;
 }
-function analyzeAudio(data, sr0, onProgress) {
+function analyzeAudio(data, sr0, onProgress, surd) {
   const { x, sr } = downsample(data, sr0);
   const N = 1024, hop = 256, d = new Float32Array(N >> 1);
   const frames = [], nF = Math.max(0, Math.floor((x.length - N) / hop));
@@ -916,13 +923,14 @@ function analyzeAudio(data, sr0, onProgress) {
   // nível de referência robusto (percentil 90): picos de ataque não derrubam o resto da nota
   const rs = frames.map(f => f.rms).filter(r => r > 0.002).sort((a, b) => a - b);
   const ref = rs.length ? rs[Math.floor(rs.length * 0.9)] : 0;
-  const gate = Math.max(0.004, ref * 0.12), piso = Math.max(0.0025, ref * 0.05);
+  // surdina: som bem mais baixo — aceita volumes menores
+  const gate = surd ? Math.max(0.0015, ref * 0.12) : Math.max(0.004, ref * 0.12), piso = surd ? Math.max(0.001, ref * 0.05) : Math.max(0.0025, ref * 0.05);
   for (let i = 0; i < nF; i++) {
     const fr = frames[i]; fr.midi = null; fr.conf = 0;
     if (fr.rms >= piso) {
-      const r = yin(x, fr.o, N, sr, d);
+      const r = yin(x, fr.o, N, sr, d, surd);
       // abaixo do gate só aceita se a altura for bem clara (microfone de fone abafa notas longas)
-      if (r && (r.conf > (fr.rms >= gate ? 0.8 : 0.92))) { fr.midi = 69 + 12 * Math.log2(r.f / 440); fr.conf = r.conf; }
+      if (r && (r.conf > (fr.rms >= gate ? (surd ? 0.75 : 0.8) : (surd ? 0.88 : 0.92)))) { fr.midi = 69 + 12 * Math.log2(r.f / 440); fr.conf = r.conf; }
     }
     if (onProgress && i % 200 === 0) onProgress(i / nF);
   }
@@ -992,7 +1000,7 @@ function analyzeAudio(data, sr0, onProgress) {
 // ---------- Correção de estudo ----------
 // esp: [{m, t, d}] (som real, segundos a partir do início da gravação); tocadas: saída de analyzeAudio
 // semTempo: só compara a sequência de notas (tocar de ouvido / arquivo sem sincronia)
-function avaliar(esp, tocadas, beat, semTempo) {
+function avaliar(esp, tocadas, beat, semTempo, surd) {
   const E = esp, T = tocadas, nE = E.length, nT = T.length;
   // deslocamento global (latência do microfone / início do arquivo)
   let off = 0;
@@ -1002,7 +1010,8 @@ function avaliar(esp, tocadas, beat, semTempo) {
     if (ds.length) { ds.sort((a, b) => a - b); off = ds[ds.length >> 1]; }
   }
   const custo = (e, t) => {
-    let c = e.m === t.m ? 0 : (Math.abs(e.m - t.m) === 12 ? 0.6 : 1.2);
+    // surdina: erro de oitava costuma ser do detector (harmônicos fortes), não do músico
+    let c = e.m === t.m ? 0 : (Math.abs(e.m - t.m) === 12 ? (surd ? 0 : 0.6) : 1.2);
     if (!semTempo) c += Math.min(1.5, Math.abs(t.t0 - off - e.t) / beat);
     return c;
   };
@@ -1022,7 +1031,7 @@ function avaliar(esp, tocadas, beat, semTempo) {
       const e = E[i - 1], t = T[j - 1], r = res[i - 1];
       r.tocou = t.m; r.c = t.c || 0;
       r.dt = semTempo ? 0 : t.t0 - off - e.t;
-      r.st = t.m === e.m ? 'ok' : Math.abs(t.m - e.m) === 12 ? 'oitava' : 'errada';
+      r.st = t.m === e.m || (surd && Math.abs(t.m - e.m) === 12) ? 'ok' : Math.abs(t.m - e.m) === 12 ? 'oitava' : 'errada';
       if (r.st === 'ok' && !semTempo && Math.abs(r.dt) > beat * 0.3) r.st = r.dt > 0 ? 'atrasada' : 'adiantada';
       i--; j--;
     } else if (p === 1) i--; else { extras++; j--; }
@@ -1032,7 +1041,9 @@ function avaliar(esp, tocadas, beat, semTempo) {
   const pNotas = nE ? certas / nE : 0;
   const noTempo = res.filter(r => r.st === 'ok').length;
   const pRitmo = semTempo ? pNotas : (certas ? noTempo / certas : 0) * pNotas;
-  const cs = tocou.filter(r => r.st !== 'errada').map(r => r.c);
+  let cs = tocou.filter(r => r.st !== 'errada').map(r => r.c);
+  // surdina: ela sobe a afinação de todas as notas; avalia a afinação em relação à sua própria média (constância)
+  if (surd && cs.length) { const o = cs.slice().sort((a, b) => a - b)[cs.length >> 1]; cs = cs.map(c => c - o); }
   const mediaC = cs.length ? Math.round(cs.reduce((a, b) => a + b, 0) / cs.length) : 0;
   // afinação: até ±10 cents vale 100%; cai até 0 em ±40 cents
   const pAfin = cs.length ? cs.reduce((a, c) => a + Math.max(0, 1 - Math.max(0, Math.abs(c) - 10) / 30), 0) / cs.length : 0;
@@ -1080,7 +1091,7 @@ function quantize(notes, bpm, grid, t0) {
   return flat;
 }
 
-if (typeof module !== 'undefined') module.exports = { avaliar, detectTempo, fifthsOfName, INSTR, spell, letterName, detectKey, toMeasures, writtenView, shiftToTarget, toABC, toLetters, parseMusicXML, toMusicXML, lettersToModel, transporTexto, guessTomAcordes, guessTomNotas, analyzeAudio, quantize, keyName, MAJ_NAME, transposeFifths, barUnitsOf, flatten, isNoteLine };
+if (typeof module !== 'undefined') module.exports = { surdinaOn, yin, avaliar, detectTempo, fifthsOfName, INSTR, spell, letterName, detectKey, toMeasures, writtenView, shiftToTarget, toABC, toLetters, parseMusicXML, toMusicXML, lettersToModel, transporTexto, guessTomAcordes, guessTomNotas, analyzeAudio, quantize, keyName, MAJ_NAME, transposeFifths, barUnitsOf, flatten, isNoteLine };
 </script>
 <script>/**
  * @licstart The following is the entire license notice for the
@@ -1864,8 +1875,8 @@ function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add
 let worker = null;
 function getWorker() {
   if (worker) return worker;
-  const code = $('core').textContent + `\nonmessage = e => { let { data, sr, bpm, grid, t0, auto } = e.data;
-    const notes = analyzeAudio(data, sr, p => postMessage({ p }));
+  const code = $('core').textContent + `\nonmessage = e => { let { data, sr, bpm, grid, t0, auto, surd } = e.data;
+    const notes = analyzeAudio(data, sr, p => postMessage({ p }), surd);
     if (auto) { const b = detectTempo(notes); if (b) bpm = b; }
     postMessage({ done: true, notes, bpm, flat: quantize(notes, bpm, grid, t0) }); };`;
   worker = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
@@ -1887,7 +1898,7 @@ function analyze(data, sr, t0, label, auto) {
     setModel({ title: $('titulo').value, fifths: k.fifths, minor: k.minor, beats, beatType, tempo: bpm, measures: toMeasures(flat, barU, pickup) }, label);
     status(`${e.data.notes.length} notas reconhecidas${auto ? ` · andamento detectado: ${bpm} BPM` : ''}. Confira e corrija o tom ou as oitavas se precisar.`);
   };
-  w.postMessage({ data, sr, bpm, grid, t0, auto: !!auto });
+  w.postMessage({ data, sr, bpm, grid, t0, auto: !!auto, surd: surdinaOn() });
 }
 function status(s) { $('status').textContent = s; }
 
@@ -2193,6 +2204,18 @@ window.addEventListener('DOMContentLoaded', () => {
   tab(document.querySelector(`.tab[data-t="${aba}"]`) || SUB_TRANSP.includes(aba) ? aba : 'estudo');
   try { const l = JSON.parse(localStorage.getItem('tp_last') || 'null'); if (l && l.model) { $('titulo').value = l.title || ''; st.model = l.model; render(); $('fonte').textContent = 'Último trabalho'; } } catch (e) {}
 });
+
+// ---------- Surdina (wah-wah / Harmon): opção ligada pelo usuário; desligada, o app funciona como sempre ----------
+window.addEventListener('DOMContentLoaded', () => {
+  const chks = [...document.querySelectorAll('.surdinaChk')]; if (!chks.length) return;
+  const mostrar = on => { chks.forEach(c => { c.checked = on; }); document.querySelectorAll('.surd-info').forEach(p => { p.hidden = !on; }); };
+  mostrar(surdinaOn());
+  chks.forEach(c => c.onchange = () => {
+    try { localStorage.setItem('tp_surdina', c.checked ? '1' : '0'); } catch (e) {}
+    mostrar(c.checked);
+    if (typeof toast === 'function') toast(c.checked ? '🔇 Modo surdina ligado' : 'Modo surdina desligado');
+  });
+});
 </script>
 <script>// ===== Aba Estudo (rotina diária com progressão) e Afinador =====
 (() => {
@@ -2297,10 +2320,10 @@ async function encerrarGravacao() {
 let worker = null;
 function analisar(data, sr) {
   if (!worker) {
-    const code = $('core').textContent + '\nonmessage = e => postMessage(analyzeAudio(e.data.data, e.data.sr));';
+    const code = $('core').textContent + '\nonmessage = e => postMessage(analyzeAudio(e.data.data, e.data.sr, null, e.data.surd));';
     worker = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
   }
-  return new Promise(ok => { worker.onmessage = e => ok(e.data); worker.postMessage({ data, sr }, [data.buffer]); });
+  return new Promise(ok => { worker.onmessage = e => ok(e.data); worker.postMessage({ data, sr, surd: surdinaOn() }, [data.buffer]); });
 }
 async function lerArquivo(file) {
   const c = new (window.AudioContext || window.webkitAudioContext)();
@@ -2379,9 +2402,10 @@ function alturaBloco(buf, sr0) {
   const x = new Float32Array(N); let e = 0;
   for (let i = 0; i < N; i++) { let s = 0; for (let j = 0; j < fct; j++) s += buf[i * fct + j]; x[i] = s / fct; e += x[i] * x[i]; }
   const rmsB = Math.sqrt(e / N);
-  if (rmsB < 0.003) return null;
-  const r = yin(x, 0, N, sr0 / fct, dYin);
-  return r && r.conf > (rmsB < 0.01 ? 0.92 : 0.85) ? 69 + 12 * Math.log2(r.f / 440) : null;
+  const sd = surdinaOn();
+  if (rmsB < (sd ? 0.0012 : 0.003)) return null;
+  const r = yin(x, 0, N, sr0 / fct, dYin, sd);
+  return r && r.conf > (sd ? (rmsB < 0.005 ? 0.88 : 0.8) : (rmsB < 0.01 ? 0.92 : 0.85)) ? 69 + 12 * Math.log2(r.f / 440) : null;
 }
 
 // Botões depois da correção: menos toques entre uma tentativa e outra
@@ -2652,7 +2676,7 @@ function desenharArea(id, exTreino) {
     const esp = ag.notas.map(n => ({ m: n.m, t: ag.ini - base + n.t, d: n.d }));
     const tocadas = await analisar(g.data, g.sr);
     status(`${tocadas.length} notas ouvidas.`);
-    mostrarCorrecao(q('.est-res'), avaliar(esp, tocadas, ag.beat, false), ex, id, pt);
+    mostrarCorrecao(q('.est-res'), avaliar(esp, tocadas, ag.beat, false, surdinaOn()), ex, id, pt);
   }
   q('.arq').onchange = async e => {
     const f = e.target.files[0]; if (!f) return; e.target.value = '';
@@ -2663,7 +2687,7 @@ function desenharArea(id, exTreino) {
       const { notas } = exercicioTempos(ex, op().bpm);
       status(`${tocadas.length} notas ouvidas em "${f.name}". Arquivo enviado não tem sincronia com o metrônomo: o ritmo não entra na nota.`);
       limpar();
-      mostrarCorrecao(q('.est-res'), avaliar(notas.map(n => ({ m: n.m, t: n.t, d: n.d })), tocadas, 60 / op().bpm, true), ex, id, pt);
+      mostrarCorrecao(q('.est-res'), avaliar(notas.map(n => ({ m: n.m, t: n.t, d: n.d })), tocadas, 60 / op().bpm, true, surdinaOn()), ex, id, pt);
     } catch (err) { status('Não consegui ler esse arquivo de áudio/vídeo.'); }
   };
 }
@@ -2822,7 +2846,7 @@ function desenharOuvido(a, el) {
     status('Conferindo…');
     const tocadas = await analisar(g.data, g.sr);
     const ex = exFrase(), { notas: esp } = exercicioTempos(ex, 76);
-    const r = avaliar(esp.map(x => ({ m: x.m, t: x.t, d: x.d })), tocadas, 60 / 76, true);
+    const r = avaliar(esp.map(x => ({ m: x.m, t: x.t, d: x.d })), tocadas, 60 / 76, true, surdinaOn());
     // em "de ouvido" vale a sequência: aceita a frase uma oitava acima/abaixo inteira
     notas.push(r.nota);
     status(frase.nome ? `Era: ${frase.nome}` : 'Resposta conferida. A partitura da frase está abaixo.');
@@ -2861,9 +2885,10 @@ function loopAf() {
   const x = new Float32Array(N); let e = 0;
   for (let i = 0; i < N; i++) { let s = 0; for (let j = 0; j < fct; j++) s += af.buf[i * fct + j] || 0; x[i] = s / fct; e += x[i] * x[i]; }
   const rms = Math.sqrt(e / N);
-  if (rms < 0.003) { if (af.hist.length) af.hist.shift(); if (!af.hist.length) mostrarAf(null); return; }
-  const r = yin(x, 0, N, sr0 / fct, af.d);
-  if (!r || r.conf < (rms < 0.01 ? 0.92 : 0.85)) return;
+  const sd = surdinaOn();
+  if (rms < (sd ? 0.0012 : 0.003)) { if (af.hist.length) af.hist.shift(); if (!af.hist.length) mostrarAf(null); return; }
+  const r = yin(x, 0, N, sr0 / fct, af.d, sd);
+  if (!r || r.conf < (sd ? (rms < 0.005 ? 0.88 : 0.8) : (rms < 0.01 ? 0.92 : 0.85))) return;
   const a4 = +$('afA4').value || 440;
   const midi = 69 + 12 * Math.log2(r.f / a4);
   af.hist.push(midi); if (af.hist.length > 7) af.hist.shift();
@@ -3375,8 +3400,8 @@ const estudoLivro = (() => {
     parar();
     if (audioMudo(data, sr)) { const rr = $('lResultado'); rr.hidden = false; rr.innerHTML = 'A gravação chegou em silêncio. Feche outros apps que usam o microfone e tente de novo; se usar AirPods, teste também sem eles.'; return; }
     const res = $('lResultado'); res.hidden = false; res.innerHTML = 'Analisando…';
-    if (!worker) worker = new Worker(URL.createObjectURL(new Blob([$('core').textContent + '\nonmessage = e => postMessage(analyzeAudio(e.data.data, e.data.sr));'], { type: 'text/javascript' })));
-    const notas = await new Promise(ok => { worker.onmessage = e => ok(e.data); worker.postMessage({ data, sr }, [data.buffer]); });
+    if (!worker) worker = new Worker(URL.createObjectURL(new Blob([$('core').textContent + '\nonmessage = e => postMessage(analyzeAudio(e.data.data, e.data.sr, null, e.data.surd));'], { type: 'text/javascript' })));
+    const notas = await new Promise(ok => { worker.onmessage = e => ok(e.data); worker.postMessage({ data, sr, surd: surdinaOn() }, [data.buffer]); });
     mostrar(analiseLivre(notas, bpm, fase), bpm);
   }
   function mostrar(r, bpm) {
@@ -3407,7 +3432,9 @@ function analiseLivre(notas, bpm, fase) {
   const beat = 60 / bpm, sub = beat / 2;
   const desvios = notas.map(n => { const r = (n.t0 - fase) / sub; return Math.abs(r - Math.round(r)) * sub; });
   const pTempo = desvios.filter(d => d < beat * 0.12).length / notas.length;
-  const cs = notas.map(n => n.c || 0);
+  let cs = notas.map(n => n.c || 0);
+  // surdina: afinação medida em relação à própria média (a surdina sobe todas as notas)
+  if (surdinaOn() && cs.length) { const o = cs.slice().sort((a, b) => a - b)[cs.length >> 1]; cs = cs.map(c => c - o); notas = notas.map((n, i) => ({ ...n, c: cs[i] })); }
   const pAfin = cs.filter(c => Math.abs(c) <= 15).length / cs.length;
   const mediaC = Math.round(cs.reduce((a, b) => a + b, 0) / cs.length);
   const g = {};
