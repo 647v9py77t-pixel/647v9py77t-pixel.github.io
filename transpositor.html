@@ -14,7 +14,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
 <title>Transpositor</title>
-<script>window.APP_VERSAO = '20261127163152';</script>
+<script>window.APP_VERSAO = '20261127165740';</script>
 <style>
 :root{--azul:#1f3a5f;--ouro:#f2c14e;--fundo:#f4f1ea;--card:#fff;--txt:#1d1d1f;--sub:#6b6b70;--borda:#e2ddd2;--verm:#c0392b;--b2:#e7e2d6;--b2txt:#1f3a5f;--campo:#fff;--pre:#faf8f3;--h2:#1f3a5f;
   --seta:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%236b6b70' stroke-width='2'/%3E%3C/svg%3E")}
@@ -215,6 +215,8 @@ body.leitor-aberto{overflow:hidden}
 .ct-busca{font-size:20px!important;padding:12px 14px!important}
 .ct-nuvem{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px;margin:6px 0;padding:6px 10px;border-radius:10px;background:rgba(66,133,244,.10)}
 .ct-nuvem span{flex:1;min-width:160px}
+.ct-oferta{font-size:13px;margin:8px 0;padding:8px 10px;border-radius:10px;background:rgba(66,133,244,.10)}
+.ct-oferta .b{display:block;margin-top:6px;width:100%}
 .ct-relat li.nv{opacity:.85}
 .ct-filtros{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
 .ct-res .b.mini{min-width:44px}
@@ -3841,6 +3843,9 @@ function ctFiltros() {
   const box = $('ctFiltros'); if (!box) return;
   const cont = { todos: AC.meta.length, partitura: 0, colet: 0, estudo: 0 };
   AC.meta.forEach(m => cont[grupoDe(m)]++);
+  // + o que está só na nuvem (ainda não baixado)
+  const local = nvJaLocal(), G2 = { p: 'partitura', c: 'colet', e: 'estudo' };
+  NV.itens.forEach(n => { if (!local.has(n.i)) { cont.todos++; cont[G2[n.g] || 'partitura']++; } });
   box.innerHTML = Object.keys(GRUPOS).map(g => `<button class="b mini ${CT.grupo === g ? '' : 'b2'}" data-g="${g}">${GRUPOS[g]} <small>${cont[g]}</small></button>`).join('');
   box.querySelectorAll('[data-g]').forEach(b => b.onclick = () => { CT.grupo = b.dataset.g; ctFiltros(); ctBuscar(); });
 }
@@ -3878,18 +3883,20 @@ function ctBuscar() {
   const box = $('ctRes'); if (!box) return;
   const q0 = $('ctBusca').value.trim(), q = normal(q0);
   if (!AC.meta.length && !NV.itens.length) { box.innerHTML = '<p class="note">O acervo está vazio. Entre com o Google (☁️ acima) para buscar no Drive, ou em 📚 Acervo (no fim desta aba) sincronize as pastas do aparelho.</p>'; return; }
-  if (!q) { box.innerHTML = ''; ctRes = []; return; }
-  const palavras = q.split(/\s+/);
+  if (!q && CT.grupo === 'todos') { box.innerHTML = ''; ctRes = []; return; }
+  const palavras = q ? q.split(/\s+/) : [];
   const num = /^\d+$/.test(q), reNum = num ? new RegExp('(^|[^0-9])' + q + '(?![0-9])') : null;
   const achados = ctDoGrupo().filter(m => { const t = normal(m.nome); return num ? reNum.test(t) : palavras.every(p => t.includes(p)); })
-    .sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt', { numeric: true })).slice(0, 40);
-  const nuvem = nvAchar(q, CT.grupo, 30);
+    .sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt', { numeric: true })).slice(0, q ? 40 : 80);
+  const nuvem = nvAchar(q, CT.grupo, q ? 30 : 80), limNv = q ? 30 : 80;
   ctRes = achados.map(m => ({ m, pag: null, titulo: m.titulo })).concat(nuvem.map(n => ({ nv: n, pag: null, titulo: n.n.replace(/\.[^.]+$/, '') })));
   box.innerHTML = (achados.length ? achados.map((m, k) => ctLinha(m, null, m.colecao + (m.nome.includes('/') ? ' · ' + m.nome.replace(/\/[^/]*$/, '') : ''), k)).join('') : nuvem.length ? '' : '<p class="note">Nenhum arquivo com esse nome.</p>') +
-    (nuvem.length ? `<div class="ac-dentro-tit">☁️ Na nuvem${nuvem.length >= 30 ? ' (30 primeiros, refine a busca)' : ''} <small>— toque para baixar</small></div>` + nuvem.map((n, j) => ctLinhaNv(n, achados.length + j)).join('') : '') +
-    (AC.meta.length ? `<button class="b b2" id="ctDentro" style="width:100%;margin-top:6px">🔎 Procurar "${esc(q0)}" dentro das ${GRUPOS[CT.grupo] === 'Tudo' ? 'partituras e coletâneas' : GRUPOS[CT.grupo].replace(/^\S+ /, '').toLowerCase()} do aparelho</button>` : '');
+    (nuvem.length ? `<div class="ac-dentro-tit">☁️ Na nuvem${nuvem.length >= limNv ? ` (${limNv} primeiros, digite para filtrar)` : ''} <small>— toque para baixar</small></div>` + nuvem.map((n, j) => ctLinhaNv(n, achados.length + j)).join('') : '') +
+    (CT.grupo === 'colet' || !q ? ctOfertaColet() : '') +
+    (q ? `<button class="b b2" id="ctDentro" style="width:100%;margin-top:6px">🔎 Procurar "${esc(q0)}" dentro das ${GRUPOS[CT.grupo] === 'Tudo' ? 'partituras e coletâneas' : GRUPOS[CT.grupo].replace(/^\S+ /, '').toLowerCase()} do aparelho</button>` : '');
   ctLigar(box);
   if ($('ctDentro')) $('ctDentro').onclick = ctBuscarDentro;
+  ctLigarOferta(box);
 }
 async function ctBuscarDentro() {
   const q0 = $('ctBusca').value.trim(), q = normal(q0), box = $('ctRes'); if (!q) return;
@@ -3901,8 +3908,28 @@ async function ctBuscarDentro() {
   box.innerHTML = base.map((r, k) => ctLinha(r.m, null, r.m.colecao, k)).join('') +
     `<div class="ac-dentro-tit">Dentro dos PDFs: ${achados.length ? `${achados.length} página${achados.length > 1 ? 's' : ''}` : 'nada encontrado'}${achados.length > 30 ? ' (mostrando 30)' : ''}</div>` +
     mais.map((r, j) => ctLinha(r.m, r.pag, '…' + r.trecho + '…', base.length + j)).join('') +
-    (semTexto ? `<p class="note">${semTexto} PDF${semTexto > 1 ? 's são imagens escaneadas' : ' é imagem escaneada'}: neles a busca só acha pelo nome do arquivo.</p>` : '');
-  ctLigar(box);
+    (semTexto ? `<p class="note">${semTexto} PDF${semTexto > 1 ? 's são imagens escaneadas' : ' é imagem escaneada'}: neles a busca só acha pelo nome do arquivo.</p>` : '') +
+    (CT.grupo === 'todos' || CT.grupo === 'colet' ? ctOfertaColet() : '');
+  ctLigar(box); ctLigarOferta(box);
+}
+// Coletâneas que ainda estão só na nuvem: a busca por número/nome dentro delas precisa delas no aparelho
+const nvColetFaltando = () => { const l = nvJaLocal(); return NV.itens.filter(n => n.g === 'c' && !l.has(n.i)); };
+function ctOfertaColet() {
+  const f = nvColetFaltando(); if (!f.length) return '';
+  return `<div class="ct-oferta">☁️ ${f.length} coletânea${f.length > 1 ? 's estão' : ' está'} só na nuvem. Para achar o hino pela página (número ou nome dentro delas), baixe para o aparelho uma vez (cerca de 120 MB, melhor no Wi-Fi).<button class="b mini" data-baixacolet>⬇ Baixar as coletâneas</button></div>`;
+}
+function ctLigarOferta(box) {
+  const b = box.querySelector('[data-baixacolet]'); if (!b) return;
+  b.onclick = async () => {
+    if (!nvToken()) { if (confirm('Precisa entrar com sua conta Google. Entrar agora?')) nvEntrar(); return; }
+    const f = nvColetFaltando(), st = $('ctStatus'); b.disabled = true; let ok = 0, erro = 0;
+    for (let i = 0; i < f.length; i++) {
+      try { await nvBaixar(f[i]); ok++; } catch (e) { erro++; if (e.message === 'login') { toastB('O acesso ao Google expirou: entre de novo.'); break; } }
+      st.textContent = `☁️ Baixando coletâneas… ${i + 1} de ${f.length}`;
+    }
+    st.textContent = ''; toastB(`${ok} coletânea${ok === 1 ? '' : 's'} no aparelho${erro ? ` · ${erro} com erro` : ''}`);
+    ctFiltros(); if ($('ctBusca').value.trim()) { ctBuscar(); ctBuscarDentro(); } else ctBuscar();
+  };
 }
 function ctDesenharLista() {
   const box = $('ctLista'); if (!box || !CT.lista) return;
@@ -4216,8 +4243,8 @@ const nvTexto = n => n._t || (n._t = normal(n.n + ' ' + (n.c || '') + ' ' + (n.f
 const nvJaLocal = () => new Set(AC.meta.filter(m => m.nuvem).map(m => m.nuvem));
 // Busca no índice da nuvem pelo nome do arquivo e das pastas (número do hino também pelo nome da pasta)
 function nvAchar(q, grupo, lim) {
-  if (!NV.itens.length || !q) return [];
-  const local = nvJaLocal(), palavras = q.split(/\s+/), num = /^\d+$/.test(q);
+  if (!NV.itens.length || (!q && grupo === 'todos')) return [];
+  const local = nvJaLocal(), palavras = q ? q.split(/\s+/) : [], num = /^\d+$/.test(q);
   const reNum = num ? new RegExp('(^|[^0-9])' + q + '(?![0-9])') : null;
   const out = NV.itens.filter(n => !local.has(n.i) && (grupo === 'todos' || n.g === NV_GRUPO[grupo]) &&
     (num ? reNum.test(normal(n.n)) || reNum.test(normal(n.c || '')) : palavras.every(p => nvTexto(n).includes(p))));
