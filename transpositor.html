@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
@@ -14,7 +14,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
 <title>Transpositor</title>
-<script>window.APP_VERSAO = '20261125110849';</script>
+<script>window.APP_VERSAO = '20261127132608';</script>
 <style>
 :root{--azul:#1f3a5f;--ouro:#f2c14e;--fundo:#f4f1ea;--card:#fff;--txt:#1d1d1f;--sub:#6b6b70;--borda:#e2ddd2;--verm:#c0392b;--b2:#e7e2d6;--b2txt:#1f3a5f;--campo:#fff;--pre:#faf8f3;--h2:#1f3a5f;
   --seta:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%236b6b70' stroke-width='2'/%3E%3C/svg%3E")}
@@ -205,6 +205,27 @@ body.leitor-aberto{overflow:hidden}
 .l-tinta{touch-action:pan-x pan-y pinch-zoom}
 #lPaginas.desenhando .l-tinta{touch-action:none;cursor:crosshair}
 .l-num{position:absolute;right:6px;bottom:4px;font-size:11px;color:#888}
+#lEditar{display:none}
+#leitor.culto #lEditar{display:inline-block}
+#leitor.culto .l-base,#leitor.culto:not(.culto-edit) .l-ferr{display:none}
+#leitor.culto{background:#000}
+#leitor.culto #lPaginas{scroll-snap-type:y mandatory;padding:8px 0 0}
+#leitor.culto .l-folha{scroll-snap-align:start;scroll-margin-top:8px}
+#leitor.culto .l-tit{font-size:15px}
+.ct-busca{font-size:20px!important;padding:12px 14px!important}
+.ct-filtros{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.ct-res .b.mini{min-width:44px}
+.ciclo-dia{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:8px 0 2px;font-size:14px}.ciclo-dia label{margin-left:auto;font-size:12px;display:flex;align-items:center;gap:4px}.ciclo-dia select{width:auto;padding:4px 6px}
+#estEtapa summary{list-style:none;cursor:pointer}#estEtapa summary::-webkit-details-marker{display:none}
+.ct-sub{font-weight:700;font-size:13px;margin:10px 0 4px}.etapa-crit{list-style:none;padding:0;margin:0}.etapa-crit li{margin:2px 0}
+.hino-dia{display:flex;flex-direction:column;gap:2px;padding:12px 14px;margin:8px 0;border-radius:12px;background:rgba(31,58,95,.08)}
+.hino-dia b{font-size:18px}
+.sub-t{display:flex;gap:6px;margin:0 0 10px}
+.sub-t button{flex:1;border:1px solid var(--linha,#ddd);background:var(--card,#fff);color:inherit;border-radius:12px;padding:10px 4px;font-size:15px;font-weight:600}
+.sub-t button.on{background:var(--azul,#1f3a5f);color:#fff;border-color:transparent}
+.ct-sep{border:0;border-top:1px solid var(--linha,#ddd);margin:18px 0 6px}
+#ctColarTxt{width:100%;font-size:16px;margin-top:6px}
+.ct-relat{padding-left:18px;margin:6px 0;font-size:14px}.ct-relat li{margin:3px 0}.ct-relat li.er{color:#c0392b}
 .l-base{background:#1c1c1f;color:#fff;padding-bottom:env(safe-area-inset-bottom)}
 .l-ctl{flex-wrap:wrap;justify-content:center}
 .l-bpm{display:flex;align-items:center;gap:2px;color:#fff;font-size:15px;font-weight:600}
@@ -251,15 +272,17 @@ body.leitor-aberto{overflow:hidden}
 
   <nav class="tabs">
     <button class="tab" data-t="estudo"><i>🎺</i>Estudo</button>
+    <button class="tab" data-t="culto"><i>⛪</i>Culto</button>
+    <button class="tab" data-t="transpor"><i>🔁</i>Transpor</button>
     <button class="tab" data-t="afinador"><i>🎯</i>Afinador</button>
-    <button class="tab" data-t="repert"><i>📑</i>Repertório</button>
-    <button class="tab" data-t="gravar"><i>🎤</i>Gravar</button>
-    <button class="tab" data-t="partitura"><i>🎼</i>Partitura</button>
-    <button class="tab" data-t="cifra"><i>📝</i>Cifra</button>
   </nav>
+  <div class="sub-t" id="subTransp" hidden>
+    <button data-s="gravar">🎤 Gravar</button><button data-s="partitura">🎼 Partitura</button><button data-s="cifra">📝 Cifra</button>
+  </div>
 
   <section class="pane" id="p_estudo">
     <div class="card" id="estHoje"></div>
+    <div class="card" id="estEtapa"></div>
     <div class="card" id="estDesafios"></div>
     <details class="card est-area" id="cardPlano">
       <summary><span class="ck">🗂️</span><span class="nm">Plano de estudo</span><span class="mt">livros</span></summary>
@@ -280,29 +303,32 @@ body.leitor-aberto{overflow:hidden}
     <p class="note" style="text-align:center">Use fone de ouvido ao gravar com acompanhamento. O progresso fica salvo só neste aparelho.<br><button class="b b2 mini" id="estZerar" style="margin-top:8px">Zerar progresso</button></p>
   </section>
 
-  <section class="card pane" id="p_repert">
-    <details class="acervo" id="acervoBox">
-      <summary><b>📚 Acervo</b> <small>— suas pastas de partituras e cifras</small></summary>
-      <p class="note" style="margin-top:4px">Escolha a pasta inteira do tablet (com subpastas). Quando colocar PDFs novos nela, toque em 🔄 e escolha a mesma pasta: o app traz só o que é novo ou mudou. O Safari não deixa o app olhar a pasta sozinho, por isso o toque.</p>
-      <div id="acLembrete"></div>
-      <div id="acColecoes"></div>
-      <button class="b b2" id="acSincBt" style="width:100%;margin-top:6px">🔄 Sincronizar pasta</button>
-      <div id="acSinc" class="rp-cifra" hidden>
-        <label>Coleção<select id="acColSel"></select></label>
-        <label id="acNovaNome" hidden style="margin-top:6px">Nome da nova coleção<input type="text" id="acNovaNomeIn" placeholder="vazio = usa o nome da pasta"></label>
-        <label class="chk"><input type="checkbox" id="acRemover"> Tirar do app o que não estiver mais na pasta</label>
-        <label class="file ac-pasta" id="acPastaLbl">📁 Escolher a PASTA inteira<input type="file" id="acPasta" webkitdirectory directory multiple></label>
-        <label class="file">📂 Ou escolher arquivos soltos / um .zip<input type="file" id="acArq" multiple accept=".pdf,.txt,.zip,.cho,.chopro,.chordpro,application/pdf,application/zip,text/plain"></label>
-        <button class="b b2 mini" id="acCancelar" style="margin-top:6px">Cancelar</button>
-      </div>
-      <div id="acStatus" class="est-status"></div>
-      <input type="search" id="acBusca" placeholder="🔍 Nº ou nome do louvor (ex.: 656, Grande é o Senhor)" style="margin-top:8px" enterkeyhint="search">
-      <button class="b b2" id="acBuscarDentro" style="width:100%;margin-top:6px">🔎 Procurar dentro das coletâneas (PDFs)</button>
-      <div id="acDentro"></div>
-      <div id="acResultados"></div>
+  <section class="card pane" id="p_culto">
+    <h2 style="margin-top:0">⛪ Culto</h2>
+    <input type="search" id="ctBusca" class="ct-busca" placeholder="🔍 Nº ou nome do hino" enterkeyhint="search" autocomplete="off">
+    <div class="ct-filtros" id="ctFiltros"></div>
+    <div id="ctStatus" class="est-status"></div>
+    <div id="ctRes"></div>
+    <details class="acervo" id="ctColar" style="margin-top:10px"><summary><b>📋 Montar a lista pelo texto ou foto</b> <small>— a lista que o dirigente mandou</small></summary>
+      <p class="note">Um louvor por linha, com número e/ou nome. <b>Para fotografar na hora:</b> toque no campo abaixo, segure o dedo nele e escolha <b>"Digitalizar Texto"</b> (ou toque no ícone de texto com câmera no teclado) e aponte para a lista.</p>
+      <textarea id="ctColarTxt" rows="6" placeholder="Ex.:&#10;1. 656 - Grande é o Senhor&#10;2. Ao Único&#10;Ceia: Crucificado foi meu Jesus"></textarea>
+      <label class="file" style="margin-top:6px">📷 Ou abrir uma foto da lista<input type="file" id="ctFoto" accept="image/*"></label>
+      <img id="ctFotoImg" alt="Foto da lista" hidden style="max-width:100%;border-radius:10px;margin-top:6px">
+      <p class="note" id="ctFotoDica" hidden>Na foto: segure o dedo sobre o texto, toque em "Selecionar tudo" e depois "Copiar"; cole no campo acima e toque em Montar.</p>
+      <button class="b" id="ctMontar" style="width:100%;margin-top:6px">🎶 Montar a lista</button>
+      <div id="ctColarRes"></div>
     </details>
+    <h3 style="margin-bottom:4px">🎶 Lista de hoje</h3>
+    <div id="ctLista"></div>
+    <div class="btns">
+      <button class="b" id="ctTocar">▶ Tocar a lista</button>
+      <button class="b b2" id="ctSalvarRp">💾 Salvar como repertório</button>
+      <button class="b b2" id="ctLimpar">🧹 Nova lista</button>
+    </div>
+    <p class="note">Ao tocar: uma página por tela, a tela não apaga, e é só tocar na borda direita (avança) ou esquerda (volta). ✏️ no topo libera as anotações.</p>
+    <hr class="ct-sep">
     <div id="rpListaBox">
-      <h2>📑 Repertório</h2>
+      <h3 style="margin-bottom:4px">📑 Repertórios salvos</h3>
       <p class="note" style="margin-top:0">Junte os hinos de um evento (casamento, culto, ensaio) num documento só: vários PDFs e cifras, na ordem que você quiser, com sumário. Fica guardado só neste aparelho.</p>
       <button class="b" id="rpNovo" style="width:100%;margin:8px 0">➕ Novo repertório</button>
       <div id="rpLista"></div>
@@ -335,6 +361,22 @@ body.leitor-aberto{overflow:hidden}
       <p class="note">"Abrir tudo" mostra os hinos em sequência, rolando sem trocar de arquivo, com metrônomo e anotações. "Gerar PDF único" cria um arquivo só (com sumário) para salvar em Arquivos ou mandar para alguém.</p>
       <button class="b b2 mini" id="rpExcluir" style="margin-top:6px">🗑 Excluir repertório</button>
     </div>
+    <details class="acervo" id="acervoBox">
+      <summary><b>📚 Acervo</b> <small>— suas pastas de partituras e cifras</small></summary>
+      <p class="note" style="margin-top:4px">Escolha a pasta inteira do tablet (com subpastas). Quando colocar PDFs novos nela, toque em 🔄 e escolha a mesma pasta: o app traz só o que é novo ou mudou. O Safari não deixa o app olhar a pasta sozinho, por isso o toque.</p>
+      <div id="acLembrete"></div>
+      <div id="acColecoes"></div>
+      <button class="b b2" id="acSincBt" style="width:100%;margin-top:6px">🔄 Sincronizar pasta</button>
+      <div id="acSinc" class="rp-cifra" hidden>
+        <label>Coleção<select id="acColSel"></select></label>
+        <label id="acNovaNome" hidden style="margin-top:6px">Nome da nova coleção<input type="text" id="acNovaNomeIn" placeholder="vazio = usa o nome da pasta"></label>
+        <label class="chk"><input type="checkbox" id="acRemover"> Tirar do app o que não estiver mais na pasta</label>
+        <label class="file ac-pasta" id="acPastaLbl">📁 Escolher a PASTA inteira<input type="file" id="acPasta" webkitdirectory directory multiple></label>
+        <label class="file">📂 Ou escolher arquivos soltos / um .zip<input type="file" id="acArq" multiple accept=".pdf,.txt,.zip,.cho,.chopro,.chordpro,application/pdf,application/zip,text/plain"></label>
+        <button class="b b2 mini" id="acCancelar" style="margin-top:6px">Cancelar</button>
+      </div>
+      <div id="acStatus" class="est-status"></div>
+    </details>
   </section>
 
   <section class="card pane" id="p_afinador">
@@ -402,7 +444,7 @@ Aquilo que fui não sou mais,"></textarea>
     <div id="cifraRes" hidden>
       <p id="cifraInfo" style="font-weight:600;margin:12px 0 0"></p>
       <pre id="cifraOut"></pre>
-      <button class="b b2" id="btnCopyCifra">Copiar</button>
+      <div class="btns"><button class="b b2" id="btnCopyCifra">Copiar</button><button class="b" id="btnCifraCulto">➕ Mandar para o Culto</button></div>
     </div>
   </section>
 
@@ -418,6 +460,7 @@ Aquilo que fui não sou mais,"></textarea>
       <div style="display:flex;gap:6px"><button class="b b2" id="octDown">8ª ↓</button><button class="b b2" id="octUp">8ª ↑</button></div>
     </div>
     <div class="btns"><button class="b" id="btnPlay">▶ Ouvir</button><button class="b b2" id="btnStop">■</button><button class="b b2" id="btnXML">Baixar MusicXML</button><button class="b b2" id="btnPrint">Imprimir / PDF</button></div>
+    <button class="b" id="btnPartCulto" style="width:100%;margin-top:8px">➕ Mandar para o Culto (Lista de hoje)</button>
     <div id="score"></div>
     <div class="noprint">
       <h2 style="margin-top:14px">Cifra de notas</h2>
@@ -431,6 +474,7 @@ Aquilo que fui não sou mais,"></textarea>
     <button class="l-bt" id="lFechar">✕</button>
     <div class="l-tit" id="lTitulo"></div>
     <button class="l-bt" id="lAnt">‹</button><button class="l-bt l-pag" id="lPag">1/1</button><button class="l-bt" id="lProx">›</button>
+    <button class="l-bt" id="lEditar" title="Anotar">✏️</button>
   </div>
   <div class="l-ferr">
     <button data-f="mao" title="Navegar">✋</button><button data-f="caneta" title="Caneta">✏️</button><button data-f="marca" title="Marca-texto">🖍️</button><button data-f="texto" title="Texto">🔤</button><button data-f="borracha" title="Borracha">🧽</button>
@@ -904,6 +948,9 @@ function analyzeAudio(data, sr0, onProgress) {
   for (const s of segs) {
     const short = s.e - s.s < minF;
     if (s.m == null && (s.e - s.s) <= gapF) { gap = s; continue; }   // falha curta de altura: decide abaixo
+    // trecho sem altura mais longo (respiração entre notas iguais, ex.: semibreves repetidas do Arban): também decide
+    // pela queda de volume — se o som continuou forte (microfone abafado), junta; se calou, são duas notas
+    if (s.m == null) { gap = s; continue; }
     if (short && s.m != null && clean.length && !gap) { clean[clean.length - 1].e = s.e; continue; }
     const last = clean[clean.length - 1];
     if (last && s.m != null && last.m === s.m && !onset[s.s]) {
@@ -1207,6 +1254,8 @@ const AREAS = [
     ref: 'Baseado nos estudos de golpe de língua simples do Arban (domínio público).',
     dica: 'Língua leve, "tu", ar contínuo entre as notas. Todas as notas com o mesmo volume e duração.',
     gerar(n, dia) {
+      // níveis 1–3: os "First Studies" originais do Arban, nota por nota
+      if (n <= 3) { const pool = [null, [1, 2, 3], [2, 3, 4, 5], [4, 5, 6]][n]; return arbanPrimeiro(pool[dia % pool.length]); }
       const valores = n <= 3 ? 4 : n <= 6 ? 2 : 1;
       const bpm = [0, 72, 84, 96, 66, 76, 88, 60, 68, 76, 84][n];
       const pc = [0, 5, 7, 10, 2][dia % (n >= 5 ? 5 : 1)];
@@ -1302,8 +1351,8 @@ const AREAS = [
     dica: 'Ouça a tônica, cante a frase por dentro e só depois toque. Não tem problema errar: repita a frase quantas vezes quiser.',
   },
   {
-    id: 'repert', nome: 'Repertório', icone: '📖', min: 7, tipo: 'timer',
-    ref: 'Aplicar a técnica do dia numa música de verdade.',
+    id: 'repert', nome: 'Hino do dia (repertório)', icone: '📖', min: 7, tipo: 'hino',
+    ref: 'Aplicar a técnica do dia num hino de verdade: vem da lista do próximo culto (aba Culto) ou, se ela estiver vazia, do seu acervo em rodízio.',
     texto: nivel => [
       'Escolha um hino ou uma música do repertório da igreja e toque do começo ao fim.',
       'Use a aba Partitura para abrir o MusicXML já transposto para trompete, ou a aba Cifra.',
@@ -1338,6 +1387,27 @@ function clarkeExercicio(num) {
   return null;
 }
 
+// ---------- Arban, Complete Conservatory Method (1864, domínio público): "First Studies" nº 1–6 ----------
+// Só as notas do original (sem os dedilhados e textos da edição moderna). Altura ESCRITA; w = mínima (8), s = semibreve (16).
+// Arban: ♩=60 nos dez primeiros estudos, golpe "tu", respiração nas vírgulas (no app, uma pausa curta não é necessária).
+const ARBAN_FS = (() => {
+  const N = { E4: 64, F4: 65, 'F#4': 66, G4: 67, 'G#4': 68, A4: 69, B4: 71, C5: 72, 'C#5': 73, D5: 74, E5: 76, F5: 77 };
+  // "G4:s A4:m" → notas; s = semibreve, m = mínima
+  const L = txt => txt.trim().split(/\s+/).map(t => { const [p, d] = t.split(':'); return { w: N[p], d: d === 's' ? 16 : 8 }; });
+  const par = (a, b) => `${a}:m ${b}:m ${a}:s`;   // padrão dos nº 3–5: duas mínimas e a 1ª de novo em semibreve
+  return {
+    1: L('G4:s G4:s C5:s C5:s A4:s A4:s D5:s D5:s F4:s F4:s A4:s A4:s G4:s G4:s B4:s B4:s G4:s G4:s C5:s'),
+    2: L('G4:m G4:m A4:m A4:m B4:m B4:m C5:s A4:m A4:m B4:m B4:m C5:m C5:m D5:s D5:m D5:m C5:m C5:m B4:m B4:m A4:s C5:m C5:m B4:m B4:m A4:m A4:m G4:s'),
+    3: L([['E4', 'F4'], ['F4', 'G4'], ['G4', 'A4'], ['A4', 'B4'], ['F4', 'G4'], ['G4', 'A4'], ['A4', 'B4'], ['B4', 'C5'], ['G4', 'A4'], ['A4', 'B4'], ['B4', 'C5'], ['C5', 'D5']].map(p => par(...p)).join(' ')),
+    4: L([['E5', 'F5'], ['D5', 'E5'], ['C5', 'D5'], ['B4', 'C5'], ['D5', 'E5'], ['C5', 'D5'], ['B4', 'C5'], ['A4', 'B4'], ['C5', 'D5'], ['B4', 'C5'], ['G4', 'A4'], ['C5', 'D5']].map(p => par(...p)).join(' ')),
+    5: L([['E4', 'G4'], ['F4', 'A4'], ['G4', 'B4'], ['A4', 'C5'], ['B4', 'D5'], ['C5', 'E5'], ['C5', 'E5'], ['B4', 'D5'], ['A4', 'C5'], ['G4', 'B4'], ['F4', 'A4'], ['E4', 'G4']].map(p => par(...p)).join(' ')),
+    6: L('C5:m B4:m C5:m D5:m C5:m B4:m A4:s D5:m C#5:m D5:m E5:m D5:m C5:m B4:s G4:m F#4:m G4:m A4:m B4:m C5:m D5:s C5:m E5:m D5:m C5:m B4:m A4:m G#4:s A4:m G#4:m A4:m B4:m C5:m A4:m B4:s B4:m A4:m B4:m C5:m D5:m B4:m C5:s'),
+  };
+})();
+function arbanPrimeiro(k) {
+  return { titulo: `Arban, First Studies nº ${k}`, bpm: 72, bpmIni: 60, notas: ARBAN_FS[k].map(x => ({ ...x })), fifthsW: 0, bordao: 60,
+    nota: 'Arban (1864), domínio público. Ataque "tu" em cada nota, som cheio do começo ao fim e respiração rápida nas vírgulas do original (a cada 2 compassos). Arban pede ♩=60.' };
+}
 // Ordem da rotina: aquecimento (Stamp) → flow (Cichowicz) → flexibilidade (Bai Lin)
 // → técnica (Clarke) → articulação/escalas → leitura (Getchell) → ouvido → repertório. Total ≈ 60 min.
 const ORDEM_MIN = { aquec: 6, longas: 4, flow: 6, flex: 8, tecnica: 7, artic: 5, escalas: 5, ritmo: 8, ouvido: 6, repert: 5 };
@@ -1433,23 +1503,41 @@ function forcaArea(P, id) {
   const h = P.hist.filter(x => x.a === id).slice(-4);
   return h.length ? h.reduce((s, x) => s + x.n, 0) / h.length : null;
 }
+// Ciclo da semana (metodologia, Parte 3), contado a partir do dia do culto: 0 = culto, 1 = dia seguinte (leve)…
+// Peso 0 = a área sai do plano do dia (fica como extra). Prática espaçada e intercalada + dia pesado seguido de leve.
+const CICLO = [
+  { nome: 'Dia de culto', carga: 'só aquecer', peso: { longas: 1, repert: 1 } },
+  { nome: 'Leve (pós-culto)', carga: 'leve', peso: { longas: 1, flow: 1.3, flex: 0.8, artic: 0.6, ritmo: 1.3, ouvido: 1.4, repert: 1 } },
+  { nome: 'Técnica', carga: 'média', peso: { longas: 1, flow: 1, flex: 0.7, tecnica: 1.5, artic: 1.2, escalas: 1.4, ritmo: 0.7, ouvido: 0.6, repert: 1 } },
+  { nome: 'Flexibilidade e registro', carga: 'pesada', peso: { longas: 1.2, flow: 1, flex: 1.6, tecnica: 1.1, artic: 0.7, escalas: 0.7, ritmo: 0.6, ouvido: 0.5, repert: 1 } },
+  { nome: 'Articulação e leitura', carga: 'média', peso: { longas: 1, flow: 1, flex: 0.8, tecnica: 0.7, artic: 1.5, escalas: 0.7, ritmo: 1.5, ouvido: 1.3, repert: 1 } },
+  { nome: 'Simulação de culto', carga: 'pesada', peso: { longas: 1, flow: 1, flex: 0.8, tecnica: 0.8, artic: 0.8, escalas: 1.2, ritmo: 0.6, ouvido: 0.6, repert: 2 } },
+  { nome: 'Hinos do culto', carga: 'leve-média', peso: { longas: 1, flow: 1, flex: 0.8, tecnica: 0.5, artic: 0.6, escalas: 0.5, ritmo: 0.8, ouvido: 1.3, repert: 1.6 } },
+];
+// dia da semana do hojeN (0 = domingo); diaNum conta dias desde 01/01/1970, uma quinta-feira
+const diaSemana = hojeN => (hojeN + 4) % 7;
+function cicloDoDia(P, hojeN) { const c = P.diaCulto == null ? 0 : P.diaCulto; return CICLO[(diaSemana(hojeN) - c + 7) % 7]; }
 function planoDoDia(P, hojeN, total) {
   total = total === 45 ? 45 : 60;
+  const ciclo = cicloDoDia(P, hojeN), culto = ciclo === CICLO[0];
+  const normalHoje = P.cultoTreinoNormal === String(hojeN);   // no dia do culto dá para pedir o treino normal
+  if (culto && !normalHoje) total = 15;   // dia de culto: só aquecer (10–15 min) antes do culto
   const aq = ORDEM_MIN.aquec;
   let ids = AREAS.map(a => a.id).filter(id => id !== 'aquec');
   const forca = Object.fromEntries(ids.map(id => [id, forcaArea(P, id)]));
   const fraq = id => forca[id] == null ? 0.5 : Math.max(0, Math.min(1, (95 - forca[id]) / 45));
-  const fora = [];
-  if (total === 45) {
-    // tira o repertório livre e a área opcional mais forte (empate: revezamento pelo dia)
-    fora.push('repert');
-    const opc = ['longas', 'artic', 'escalas', 'ouvido'];
-    const rod = opc.map((id, i) => ({ id, k: (forca[id] == null ? 70 : forca[id]) + ((i + hojeN) % opc.length) * 0.5 }));
-    rod.sort((a, b) => b.k - a.k); fora.push(rod[0].id);
+  const pesoDia = id => culto && normalHoje ? 1 : (ciclo.peso[id] || 0);
+  const fora = ids.filter(id => !pesoDia(id));
+  ids = ids.filter(id => pesoDia(id));
+  if (total === 45 && ids.length > 6) {
+    // tira as 2 áreas opcionais mais fortes (empate: revezamento pelo dia); o Hino do dia fica, porque prepara o culto
+    const opc = ['longas', 'artic', 'escalas', 'ouvido'].filter(id => ids.includes(id));
+    const rod = opc.map((id, i) => ({ id, k: (forca[id] == null ? 70 : forca[id]) + ((i + hojeN) % opc.length) * 0.5 - 20 * (pesoDia(id) - 1) }));
+    rod.sort((a, b) => b.k - a.k); rod.slice(0, Math.min(2, ids.length - 6)).forEach(r => fora.push(r.id));
     ids = ids.filter(id => !fora.includes(id));
   }
-  // minutos proporcionais: base × (0,7 a 1,3 conforme a fraqueza), escalados para caber no total
-  const peso = Object.fromEntries(ids.map(id => [id, ORDEM_MIN[id] * (0.7 + 0.6 * fraq(id))]));
+  // minutos proporcionais: base × (0,7 a 1,3 conforme a fraqueza) × ênfase do dia, escalados para caber no total
+  const peso = Object.fromEntries(ids.map(id => [id, ORDEM_MIN[id] * (0.7 + 0.6 * fraq(id)) * pesoDia(id)]));
   const soma = ids.reduce((s, id) => s + peso[id], 0), resto = total - aq;
   const min = { aquec: aq };
   ids.forEach(id => { min[id] = Math.max(3, Math.round(peso[id] / soma * resto)); });
@@ -1458,7 +1546,85 @@ function planoDoDia(P, hojeN, total) {
   for (let i = 0; dif !== 0 && i < 50; i++) { const id = ord[i % ord.length]; if (dif > 0) { min[id]++; dif--; } else if (min[id] > 3) { min[id]--; dif++; } }
   // foco: as 2 áreas mais fracas que já têm nota e ainda não passam de 85
   const foco = ids.filter(id => forca[id] != null && forca[id] <= 85).sort((a, b) => forca[a] - forca[b]).slice(0, 2);
-  return { total, min, fora, foco, ids: ['aquec', ...ids] };
+  return { total, min, fora, foco, ids: ['aquec', ...ids], ciclo };
+}
+
+// ---------- Etapas da metodologia (metodologia-trompete.md, Parte 2) ----------
+// Referências aos métodos: o app abre o PDF do acervo (livro = regex no nome) e procura a seção (busca) no texto.
+// Critérios: 'auto' são medidos pelo app (níveis e notas); os outros o Lucas marca quando cumprir.
+const LIVROS_REF = {
+  arban: /arban.*(complete|conservatory|completo|metodo|method)|arbans? (platinum|traduzido)/i,
+  clarke: /clarke.*(technical|tecnical|tecnicos)/i,
+  wsmith: /walter.?smith.*(flexib)/i,
+  bailin: /bai ?lin/i,
+  cichowicz: /cichowicz.*flow/i,
+  getchell1: /getchell.*(first|1)/i,
+  getchell2: /getchell.*second/i,
+  wurm: /wurm/i,
+  kopprasch: /kopprasch/i,
+  concone: /concone.*lyrical/i,
+};
+const crit = (txt, auto) => ({ txt, auto });
+const nivelMin = (ids, n) => P => ids.every(id => (P.nivel[id] || 0) >= n);
+const ETAPAS = [
+  { n: 1, nome: 'Base', sem: '1–6', registro: 'até sol5 (teto lá5)', bpm: '♩=72–88',
+    objetivo: 'Hábito diário com descanso, som centrado no médio e o diagnóstico: nota mais aguda limpa e minutos até cansar.',
+    material: [['Técnica', 'clarke', 'First Study', 'Clarke, 1º estudo, nº 1–8 (posições graves, legato)'], ['Articulação', 'arban', 'First Studies', 'Arban, First Studies nº 1–10'],
+      ['Flexibilidade', 'wsmith', 'Lesson', 'Walter Smith, lições 1–4'], ['Flow', 'cichowicz', '', 'Cichowicz, primeiros estudos (♩=60–72)'], ['Rítmica', 'getchell1', '', 'Getchell, Livro 1, estudos iniciais']],
+    criterios: [crit('Técnica (Clarke) no nível 3 ou mais', nivelMin(['tecnica'], 3)), crit('Articulação no nível 3 ou mais', nivelMin(['artic'], 3)),
+      crit('Nota longa de sol5 com 4 tempos, limpa'), crit('Resistência: 20 min tocando (com descanso 1:1) sem perder o som')] },
+  { n: 2, nome: 'Som de culto', sem: '7–12', registro: 'até lá5 (teto si♭5)', bpm: '♩=80–96',
+    objetivo: 'Som cheio e afinado para tocar em conjunto e resistência de um culto inteiro.',
+    material: [['Técnica', 'clarke', 'First Study', 'Clarke, 1º estudo nº 9–26 (Etude I)'], ['Articulação', 'arban', 'First Studies', 'Arban, First Studies nº 11–25'],
+      ['Flexibilidade', 'wsmith', 'Lesson', 'Walter Smith, lições 5–10; Bai Lin até o 5º–6º harmônico'], ['Rítmica', 'getchell1', '', 'Getchell, Livro 1, primeira metade']],
+    criterios: [crit('Técnica no nível 4 ou mais', nivelMin(['tecnica'], 4)), crit('Notas longas no nível 4 ou mais', nivelMin(['longas'], 4)),
+      crit('Lá5 de 8 tempos dentro de ±15 cents (Afinador)'), crit('Simulação de culto: 4 hinos seguidos, todos acima de 80, e o 1º de novo no fim')] },
+  { n: 3, nome: 'Tons da igreja', sem: '13–20', registro: 'até si♭5 (teto dó6)', bpm: '♩=88–104',
+    objetivo: 'Dominar os tons escritos mais usados na coletânea (Dó, Fá, Sol, Ré, Si♭, Mi♭, Lá) e a flexibilidade até dó6.',
+    material: [['Técnica', 'clarke', 'Second Study', 'Clarke, 2º estudo nº 27–45'], ['Escalas', 'arban', 'Scales', 'Arban, Scales (maiores) nos 7 tons; Arpeggios iniciais'],
+      ['Articulação', 'arban', 'First Studies', 'Arban, First Studies nº 26–50'], ['Rítmica', 'arban', 'Syncopation', 'Arban, síncopes (primeiros números); Getchell Livro 1, 2ª metade']],
+    criterios: [crit('Escalas no nível 5 ou mais', nivelMin(['escalas'], 5)), crit('Flexibilidade no nível 5 ou mais', nivelMin(['flex'], 5)),
+      crit('Dó6 em ligadura acima de 80, a frio'), crit('Tocar de ouvido o hino da semana em 2 tons')] },
+  { n: 4, nome: 'Leitura e articulação', sem: '21–28', registro: 'até dó6 (teto ré6)', bpm: '♩=96–112',
+    objetivo: 'Ler hinos e louvores novos à primeira vista sem travar; staccato leve, legato de língua, pontuados e 6/8.',
+    material: [['Técnica', 'clarke', 'Third Study', 'Clarke, 3º estudo nº 46–65'], ['Articulação', 'arban', 'Slurring', 'Arban, Slurring/Legato e colcheia pontuada'],
+      ['Rítmica', 'getchell2', '', 'Getchell, Livro 2, início'], ['Lirismo', 'concone', '', 'Concone, Lyrical Studies (vocalises originais)']],
+    criterios: [crit('Leitura rítmica no nível 6 ou mais', nivelMin(['ritmo'], 6)), crit('Articulação no nível 6 ou mais', nivelMin(['artic'], 6)),
+      crit('5 hinos novos lidos à primeira vista com média acima de 80 (Hino do dia, 1ª gravação)')] },
+  { n: 5, nome: 'Velocidade', sem: '29–38', registro: 'até dó6 (teto ré6)', bpm: '♩=100–120 semicolcheias',
+    objetivo: 'Semicolcheias regulares e língua dupla e tripla para louvores rápidos e fanfarras.',
+    material: [['Técnica', 'clarke', 'Fourth Study', 'Clarke, 4º e 5º estudos (nº 66–117)'], ['Articulação', 'arban', 'Triple Tonguing', 'Arban, Triple e Double Tonguing'],
+      ['Escalas', 'arban', 'Chromatic', 'Arban, Chromatic Scales'], ['Ornamentos', 'arban', 'Ornament', 'Arban, Ornaments (primeiros)']],
+    criterios: [crit('Técnica no nível 7 ou mais', nivelMin(['tecnica'], 7)), crit('Língua dupla em nota repetida acima de 80 a ♩=112'),
+      crit('Resistência: 35 min tocando (descanso 1:1), com dó6 acima de 80 no fim')] },
+  { n: 6, nome: 'Registro e resistência', sem: '39–48', registro: 'até ré6 (teto mi6)', bpm: '♩=108–126',
+    objetivo: 'Ré6 firme e tocar 2 cultos seguidos sem perder a embocadura.',
+    material: [['Técnica', 'clarke', 'Sixth Study', 'Clarke, 6º estudo (nº 118–132)'], ['Articulação', 'arban', 'Intervals', 'Arban, Intervals'],
+      ['Flexibilidade', 'bailin', '', 'Bai Lin até o 9º–10º harmônico'], ['Rítmica', 'getchell2', '', 'Getchell, Livro 2, 2ª metade']],
+    criterios: [crit('Flexibilidade no nível 8 ou mais', nivelMin(['flex'], 8)), crit('Ré6 em ligadura e em ataque direto acima de 80, a frio, em 3 dias'),
+      crit('2 simulações de culto em dias seguidos, todos os hinos acima de 80')] },
+  { n: 7, nome: 'Lirismo', sem: '49–60', registro: 'até ré6/mi♭6 (teto mi6–fá6)', bpm: '♩=112–132',
+    objetivo: 'Frasear como cantor, tocar estudos inteiros com musicalidade, fazer introduções e solos de hino.',
+    material: [['Fraseado', 'arban', 'Art of Phrasing', 'Arban, The Art of Phrasing'], ['Estudos', 'wurm', '', 'Wurm, 40 Estudos nº 1–15'],
+      ['Estudos', 'kopprasch', '', 'Kopprasch, 60 Estudos nº 1–10'], ['Técnica', 'clarke', 'Seventh Study', 'Clarke, 7º e 8º estudos']],
+    criterios: [crit('Técnica e articulação no nível 9 ou mais', nivelMin(['tecnica', 'artic'], 9)), crit('3 estudos de Wurm e 2 de Kopprasch acima de 80 no andamento'),
+      crit('Mi♭6 limpo em ligadura'), crit('Gravar um hino completo como solo (respiração e final afinados)')] },
+  { n: 8, nome: 'Manutenção', sem: '61+', registro: 'até mi6 (teto fá6)', bpm: 'manter as metas',
+    objetivo: 'Manter tudo sem aumentar o tempo e ter autonomia no culto: ler, transpor, introduzir e acompanhar.',
+    material: [['Revisão', 'clarke', '', 'Clarke em rodízio (um estudo por semana)'], ['Revisão', 'wsmith', 'Lesson', 'Walter Smith e Bai Lin no andamento-meta'],
+      ['Estudos', 'wurm', '', 'Wurm nº 16–40'], ['Estudos', 'kopprasch', '', 'Kopprasch nº 11–34'], ['Desafio', 'arban', 'Characteristic', 'Arban, Characteristic Studies nº 1–3']],
+    criterios: [crit('Todas as áreas no nível 10', nivelMin(['longas', 'flow', 'flex', 'tecnica', 'artic', 'escalas', 'ritmo'], 10)), crit('Todo mês: 2 simulações de culto seguidas e mi6 em ligadura')] },
+];
+// Etapa sugerida pelos níveis (mapa da metodologia: E1 → níveis 1–2, E2 → 3, …, E7 → 8–9, E8 → 10)
+function etapaPelosNiveis(P) {
+  const ids = ['longas', 'flow', 'flex', 'tecnica', 'artic', 'escalas', 'ritmo'];
+  const med = ids.reduce((s, id) => s + (P.nivel[id] || 1), 0) / ids.length;
+  return med >= 10 ? 8 : med >= 8 ? 7 : Math.max(1, Math.min(6, Math.floor(med) - 1));
+}
+function etapaAtual(P) { return ETAPAS[(P.etapa || etapaPelosNiveis(P)) - 1]; }
+// Situação dos critérios da etapa: auto = medido; os manuais ficam em P.etapaOk['<etapa>:<i>']
+function criteriosEtapa(P, E) {
+  return E.criterios.map((c, i) => ({ txt: c.txt, auto: !!c.auto, ok: c.auto ? !!c.auto(P) : !!(P.etapaOk && P.etapaOk[E.n + ':' + i]), i }));
 }
 // Trecho difícil: os compassos (até 2 seguidos) com mais erros, tocados 2 vezes com 1 compasso de descanso.
 // notasRes = r.notas do avaliar (alinhadas às notas sem pausa de exercicioTempos).
@@ -1538,7 +1704,7 @@ function dicaValvula(w, cents) {
   return { valvulas: v, texto: t };
 }
 
-if (typeof module !== 'undefined') module.exports = { planoDoDia, forcaArea, trechoDificil, desafiosDaSemana, AREAS, NIVEL_MAX, fraseOuvido, exercicioModelo, exercicioTempos, progressoPadrao, registrarNota, sequenciaDias, dicaValvula, DEDILHADO, NOMES_PT, diaNum, nomeEscrito };
+if (typeof module !== 'undefined') module.exports = { CICLO, cicloDoDia, diaSemana, ETAPAS, LIVROS_REF, etapaAtual, etapaPelosNiveis, criteriosEtapa, planoDoDia, forcaArea, trechoDificil, desafiosDaSemana, AREAS, NIVEL_MAX, fraseOuvido, exercicioModelo, exercicioTempos, progressoPadrao, registrarNota, sequenciaDias, dicaValvula, DEDILHADO, NOMES_PT, diaNum, nomeEscrito };
 </script>
 <script>// ===== Interface =====
 const $ = id => document.getElementById(id);
@@ -1571,11 +1737,19 @@ function savePrefs() {
 }
 
 // ---------- Abas ----------
+// Gravar, Partitura e Cifra ficam dentro da aba "Transpor" (botões no topo dela)
+const SUB_TRANSP = ['gravar', 'partitura', 'cifra'];
 function tab(name) {
-  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.t === name));
+  if (name === 'transpor') { let s = 'gravar'; try { s = localStorage.getItem('tp_sub') || 'gravar'; } catch (e) {} name = SUB_TRANSP.includes(s) ? s : 'gravar'; }
+  const sub = SUB_TRANSP.includes(name);
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.t === name || (sub && b.dataset.t === 'transpor')));
+  document.querySelectorAll('#subTransp [data-s]').forEach(b => b.classList.toggle('on', b.dataset.s === name));
+  if ($('subTransp')) $('subTransp').hidden = !sub;
+  if (sub) try { localStorage.setItem('tp_sub', name); } catch (e) {}
   document.querySelectorAll('.pane').forEach(p => p.hidden = p.id !== 'p_' + name);
   // Estudo e Afinador não usam o instrumento/tom de destino nem o painel de resultado
-  document.body.classList.toggle('so-pane', name === 'estudo' || name === 'afinador' || name === 'repert');
+  document.body.classList.toggle('so-pane', name === 'estudo' || name === 'afinador' || name === 'repert' || name === 'culto');
+  if (name === 'culto' && window.cultoEntrar) window.cultoEntrar();
   if (name !== 'estudo' && name !== 'afinador' && window.estudoSaiu) window.estudoSaiu();
   try { localStorage.setItem('tp_aba', name); } catch (e) {}
 }
@@ -1973,6 +2147,7 @@ function cifraParaPartitura() {
 window.addEventListener('DOMContentLoaded', () => {
   fillSelects();
   document.querySelectorAll('.tab').forEach(b => b.onclick = () => tab(b.dataset.t));
+  document.querySelectorAll('#subTransp [data-s]').forEach(b => b.onclick = () => tab(b.dataset.s));
   $('btnRec').onclick = toggleRec;
   $('audioFile').onchange = e => openAudio(e.target.files[0]);
   $('scoreFile').onchange = e => openScore(e.target.files[0]);
@@ -1989,10 +2164,23 @@ window.addEventListener('DOMContentLoaded', () => {
   $('btnPlay').onclick = play; $('btnStop').onclick = stop;
   $('btnXML').onclick = exportXML;
   $('btnPrint').onclick = () => window.print();
+  // Transpor → Culto: a partitura vira PDF e a cifra vira texto, os dois guardados no acervo e postos na Lista de hoje
+  $('btnPartCulto').onclick = async () => {
+    const svg = document.querySelector('#score svg'); if (!svg || !window.mandarParaCulto) return;
+    const titulo = $('titulo').value.trim() || (st.model && st.model.title) || 'Partitura transposta';
+    try { toast('Preparando a partitura…'); await window.mandarParaCulto({ titulo, dados: await window.svgParaPdf(svg, titulo) }); }
+    catch (e) { toast('Não consegui gerar a partitura: ' + (e.message || e)); }
+  };
+  $('btnCifraCulto').onclick = async () => {
+    const txt = $('cifraOut').textContent; if (!txt.trim() || !window.mandarParaCulto) return;
+    const titulo = prompt('Nome do louvor desta cifra:', ''); if (!titulo) return;
+    await window.mandarParaCulto({ titulo: titulo.trim(), texto: txt });
+  };
   $('btnVoltaTp').onclick = () => { $('instr').value = 'Bb'; $('instr').onchange(); $('outroInstr').open = false; };
   marcaInstr();
   let aba = 'estudo'; try { aba = localStorage.getItem('tp_aba') || 'estudo'; } catch (e) {}
-  tab(document.querySelector(`.tab[data-t="${aba}"]`) ? aba : 'estudo');
+  if (aba === 'repert') aba = 'culto';   // Repertório agora fica dentro da aba Culto
+  tab(document.querySelector(`.tab[data-t="${aba}"]`) || SUB_TRANSP.includes(aba) ? aba : 'estudo');
   try { const l = JSON.parse(localStorage.getItem('tp_last') || 'null'); if (l && l.model) { $('titulo').value = l.title || ''; st.model = l.model; render(); $('fonte').textContent = 'Último trabalho'; } } catch (e) {}
 });
 </script>
@@ -2268,15 +2456,42 @@ function desenharCabecalho() {
   const seq = sequenciaDias(P, hojeN);
   const nomeA = id => { const a = AREAS.find(x => x.id === id); return a ? a.icone + ' ' + a.nome.split(' (')[0].split(':')[0] : id; };
   $('estHoje').innerHTML = `<div class="est-top"><div><b>Estudo de hoje</b><br><small>${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</small></div><div class="fogo" title="dias seguidos">🔥 ${seq}</div></div>
+    <div class="ciclo-dia">📅 Hoje: <b>${esc(pd.ciclo.nome)}</b> <small>(carga ${esc(pd.ciclo.carga)})</small>
+      <label>culto principal <select data-culto>${['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((d, i) => `<option value="${i}"${(P.diaCulto == null ? 0 : P.diaCulto) === i ? ' selected' : ''}>${d}</option>`).join('')}</select></label></div>
+    ${pd.ciclo === CICLO[0] ? `<p class="foco-txt">⛪ <b>Dia de culto:</b> só aquecer 10–15 min (respiração, bocal, notas longas e o hino). Guarde o lábio para o culto. ${P.cultoTreinoNormal === hoje ? '' : '<button class="b b2 mini" data-normal>Hoje não tem culto: treino normal</button>'}</p>` : ''}
     <div class="tempo-dia">Hoje tenho <button class="b mini ${pd.total === 45 ? '' : 'b2'}" data-td="45">45 min</button><button class="b mini ${pd.total === 60 ? '' : 'b2'}" data-td="60">60 min</button></div>
     ${pd.foco.length ? `<p class="foco-txt">📌 Foco de hoje: <b>${pd.foco.map(id => esc(nomeA(id))).join('</b> e <b>')}</b> (mais tempo onde a nota está mais baixa).</p>` : ''}
     <div class="barra"><i style="width:${Math.round(feitos / total * 100)}%"></i></div><small>${feitos} de ${total} partes · ${minFeitos} de ${pd.total} min. Pode parar quando precisar: o que fez fica salvo e volta daqui.</small>
     <div class="niveis">${AREAS.filter(a => a.gerar || a.tipo === 'ouvido').map(a => `<span>${a.icone} ${esc(a.nome.split(' (')[0].split(':')[0])} <b>${P.nivel[a.id]}</b></span>`).join('')}</div>`;
+  const sc = $('estHoje').querySelector('[data-culto]');
+  if (sc) sc.onchange = () => { P.diaCulto = +sc.value; salvar(); PD = null; parar(); montar(); };
+  const bn = $('estHoje').querySelector('[data-normal]');
+  if (bn) bn.onclick = () => { P.cultoTreinoNormal = hoje; salvar(); PD = null; parar(); montar(); };
+  desenharEtapa();
   $('estHoje').querySelectorAll('[data-td]').forEach(b => b.onclick = () => {
     const v = +b.dataset.td; if (v === pd.total) return;
     P.tempoDia = v; salvar(); PD = null; parar(); montar();
   });
   desenharDesafios();
+}
+// ---------- Etapa da metodologia (8 etapas, critérios para avançar e material de cada etapa) ----------
+function desenharEtapa() {
+  const box = $('estEtapa'); if (!box) return;
+  const E = etapaAtual(P), cs = criteriosEtapa(P, E), feitos = cs.filter(c => c.ok).length, sug = etapaPelosNiveis(P);
+  const aberto = box.querySelector('details') ? box.querySelector('details').open : false;
+  box.innerHTML = `<details${aberto ? ' open' : ''}><summary><div class="est-top"><div><b>🧭 Etapa ${E.n} de 8 · ${esc(E.nome)}</b><br><small>${feitos} de ${cs.length} critérios · registro ${esc(E.registro)} · ${esc(E.bpm)}</small></div><div class="fogo">E${E.n}</div></div></summary>
+    <p class="note" style="margin-top:6px">${esc(E.objetivo)}</p>
+    <div class="ct-sub">Para passar para a próxima etapa</div>
+    <ul class="etapa-crit">${cs.map(c => `<li><label class="chk"><input type="checkbox" data-c="${c.i}"${c.ok ? ' checked' : ''}${c.auto ? ' disabled' : ''}> ${esc(c.txt)}${c.auto ? ' <small>(o app mede)</small>' : ''}</label></li>`).join('')}</ul>
+    ${feitos === cs.length && E.n < 8 ? `<button class="b" data-av style="width:100%">🎉 Avançar para a etapa ${E.n + 1}</button>` : ''}
+    <div class="ct-sub">Material desta etapa (abre o método no seu acervo)</div>
+    <div class="etapa-mat">${E.material.map((m, i) => `<div class="ac-res"><button class="ac-abrir" data-m="${i}">📕 ${esc(m[3])}<small>${esc(m[0])}</small></button></div>`).join('')}</div>
+    <div class="nivel-ctl" style="margin-top:8px"><span>Mudar de etapa${sug !== E.n ? ` (pelos seus níveis: E${sug})` : ''}</span><button class="b b2 mini" data-e="-1">−</button><button class="b b2 mini" data-e="1">+</button></div>
+    <p class="note">Descanse tanto quanto toca. "Dominado" = acima de 80 no andamento-meta 2 vezes, de novo depois de 48 h e no fim do estudo, com o lábio cansado.</p></details>`;
+  box.querySelectorAll('[data-c]').forEach(i => i.onchange = () => { P.etapaOk = P.etapaOk || {}; P.etapaOk[E.n + ':' + i.dataset.c] = i.checked; salvar(); desenharEtapa(); });
+  box.querySelectorAll('[data-m]').forEach(b => b.onclick = () => { const m = E.material[+b.dataset.m]; if (window.abrirMetodo) window.abrirMetodo(m[1], m[2], m[3]); });
+  box.querySelectorAll('[data-e]').forEach(b => b.onclick = () => { P.etapa = Math.max(1, Math.min(8, E.n + +b.dataset.e)); salvar(); desenharEtapa(); });
+  const av = box.querySelector('[data-av]'); if (av) av.onclick = () => { P.etapa = E.n + 1; salvar(); toastE(`Etapa ${E.n + 1} liberada! 🎺`); desenharEtapa(); };
 }
 function desenharDesafios() {
   const box = $('estDesafios'); if (!box) return;
@@ -2318,7 +2533,7 @@ window.irAquecimento = irAquecimento;
 function resumoHTML(a) {
   const feito = (P.feito[hoje] || []).includes(a.id);
   if (a.id !== 'aquec' && !feito && !aquecido()) return `<span class="ck">🔒</span><span class="nm">${a.icone} ${esc(a.nome)}</span><span class="mt">depois do aquecimento</span>`;
-  const niv = a.tipo === 'timer' ? '' : ' · nív. ' + P.nivel[a.id];
+  const niv = a.tipo === 'timer' || a.tipo === 'hino' ? '' : ' · nív. ' + P.nivel[a.id];
   if (foraHoje(a.id) && !feito) return `<span class="ck">➕</span><span class="nm">${a.icone} ${esc(a.nome)}</span><span class="mt">extra · fora do plano de hoje${niv}</span>`;
   const foco = planoHoje().foco.includes(a.id) ? '📌 ' : '';
   return `<span class="ck">${feito ? '✅' : '⬜'}</span><span class="nm">${foco}${a.icone} ${esc(a.nome)}</span><span class="mt">${minDe(a)} min${niv}</span>`;
@@ -2356,6 +2571,7 @@ function desenharArea(id, exTreino) {
     return;
   }
   if (a.tipo === 'timer') return desenharTimer(a, el);
+  if (a.tipo === 'hino') return desenharHino(a, el);
   if (a.tipo === 'ouvido') return desenharOuvido(a, el);
   const ex = exTreino || gerarEx(a); exAtual[id] = ex;
   el.innerHTML = `${exTreino ? '<div class="treino-bar"><span>🎯 Treino do trecho (não conta nota)</span><button class="b b2 mini" data-volta>↩ Exercício completo</button></div>' : `<p class="ref">${esc(a.ref)}</p>${nivelHTML(a)}`}<h3>${esc(ex.titulo)}</h3><p class="note">${esc(a.dica)}</p>
@@ -2508,10 +2724,37 @@ function desenharTimer(a, el) {
   };
   el.querySelector('[data-a=ok]').onclick = concluir;
 }
+// Hino do dia: o hino vem da lista do próximo culto (aba Culto) ou do acervo; estuda no leitor com metrônomo e gravação
+function desenharHino(a, el) {
+  let desl = 0;
+  const concluir = () => { marcarFeito(P, a.id, hoje); salvar(); atualizarResumo(a.id); desenharCabecalho(); toastE('Hino do dia concluído'); abrirProxima(a.id); };
+  window.hinoBom = () => { if (!(P.feito[hoje] || []).includes(a.id)) { marcarFeito(P, a.id, hoje); salvar(); atualizarResumo(a.id); desenharCabecalho(); } };
+  const pinta = async () => {
+    const h = window.hinoDoDia ? await window.hinoDoDia(desl) : null;
+    if (!h) {
+      el.innerHTML = `<p class="ref">${esc(a.ref)}</p><p class="note">Seu acervo ainda está vazio. Sincronize as pastas em ⛪ Culto › 📚 Acervo e o hino do dia aparece aqui.</p>
+        <div class="btns"><button class="b b2" data-a="ok">✅ Concluído</button></div>`;
+      el.querySelector('[data-a=ok]').onclick = concluir; return;
+    }
+    el.innerHTML = `<p class="ref">${esc(a.ref)}</p>
+      <div class="hino-dia"><small>${h.origem === 'lista' ? `🎶 Da lista do próximo culto (${h.total} hino${h.total > 1 ? 's' : ''})` : '📚 Do seu acervo, em rodízio'}</small><b>${esc(h.titulo)}</b></div>
+      <ol class="passos">
+        <li>Leia uma vez sem tocar: tom, compasso, respirações e o trecho mais difícil. Marque com a caneta.</li>
+        <li>Toque com o metrônomo devagar (♩ 60–70), sem parar nos erros.</li>
+        <li>Toque ● Gravar: o app mede tempo e afinação. Passou de 80% nos dois, a parte do dia conta sozinha.</li>
+        <li>Se sobrar tempo, toque de ouvido a melodia em outro tom.</li>
+      </ol>
+      <div class="btns"><button class="b est-bt" data-a="abrir">📖 Abrir e estudar</button><button class="b b2" data-a="outro">🔀 Outro hino</button><button class="b b2" data-a="ok">✅ Concluído</button></div>`;
+    el.querySelector('[data-a=abrir]').onclick = () => window.estudarHino(h);
+    el.querySelector('[data-a=outro]').onclick = () => { desl++; pinta(); };
+    el.querySelector('[data-a=ok]').onclick = concluir;
+  };
+  pinta();
+}
 function abrirProxima(id) {
   const pend = a => !foraHoje(a.id) && !(P.feito[hoje] || []).includes(a.id);
   const i = AREAS.findIndex(a => a.id === id), prox = AREAS.slice(i + 1).find(pend) || AREAS.slice(0, i).find(pend);
-  if (prox) { const d = $('est_' + prox.id); $('est_' + id).open = false; d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+  if (prox) { const d = $('est_' + prox.id); $('est_' + id).open = false; d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'start' }); setTimeout(() => toastE('Descanse o lábio ~1 min antes da próxima parte (descanse tanto quanto toca).'), 2800); }
   else toastE('Plano de hoje completo! 🎺 Se ainda tiver tempo, os extras estão no fim da lista.');
 }
 
@@ -2826,8 +3069,12 @@ async function abrirLeitor(id, pag, tarefa) {
   const fontes = []; for (let i = 1; i <= doc.numPages; i++) fontes.push({ tipo: 'pdf', doc, n: i, chave: l.id + ':' + i });
   abrirFontes(fontes, [doc], pag, tarefa);
 }
-function mostrarLeitor(titulo) {
+// culto = modo de tocar: uma página por tela, toque na borda vira a página, sem ferramentas nem metrônomo, tela sempre acesa
+function mostrarLeitor(titulo, culto) {
   fecharDocs();
+  L.culto = !!culto; L.escala = 1;
+  $('leitor').classList.toggle('culto', L.culto); $('leitor').classList.remove('culto-edit');
+  if (L.culto && typeof keepAwake === 'function') keepAwake(true);
   $('leitor').hidden = false; document.body.classList.add('leitor-aberto');
   $('lTitulo').textContent = titulo;
   $('lPaginas').innerHTML = '<p class="note" style="color:#ccc;text-align:center;margin-top:40px">Abrindo…</p>';
@@ -2841,6 +3088,8 @@ function abrirFontes(fontes, docs, pag, tarefa) {
 function fecharDocs() { L.docs.forEach(d => { try { d.destroy(); } catch (e) {} }); L.docs = []; L.fontes = []; }
 function fecharLeitor() {
   estudoLivro.parar();
+  if (L.culto && typeof keepAwake === 'function') keepAwake(false);
+  L.culto = false; $('leitor').classList.remove('culto', 'culto-edit');
   $('leitor').hidden = true; document.body.classList.remove('leitor-aberto');
   if (L.io) { L.io.disconnect(); L.io = null; }
   fecharDocs();
@@ -2855,6 +3104,7 @@ function montarPaginas() {
     const d = document.createElement('div'); d.className = 'l-folha'; d.dataset.p = i;
     d.innerHTML = `<canvas class="l-pdf"></canvas><canvas class="l-tinta"></canvas><span class="l-num">${i}</span>${src.rotulo ? `<span class="l-rotulo">${esc(src.rotulo)}</span>` : ''}`;
     d.style.aspectRatio = src.tipo === 'texto' ? '1 / 1.4142' : '0.72'; box.appendChild(d);
+    if (L.culto) d.style.width = largDaPagina(src.tipo === 'texto' ? 1 / 1.4142 : 0.72) + 'px';
     L.paginas.push({ el: d, n: i, render: null, larg: 0 });
   }
   const io = new IntersectionObserver(es => es.forEach(e => {
@@ -2867,19 +3117,34 @@ function montarPaginas() {
   box.onscroll = () => {
     const meio = box.scrollTop + box.clientHeight / 3;
     const p = L.paginas.find(p => p.el.offsetTop + p.el.offsetHeight > meio);
-    if (p && p.n !== L.pag) { L.pag = p.n; $('lPag').textContent = `${p.n}/${totalPag()}`; }
+    if (p && p.n !== L.pag) { L.pag = p.n; $('lPag').textContent = `${p.n}/${totalPag()}`; tituloCulto(); }
   };
+}
+// No modo culto o título mostra o hino da página atual e o próximo da lista
+function tituloCulto() {
+  if (!L.culto) return;
+  const f = L.fontes[L.pag - 1]; if (!f || !f.item) return;
+  const prox = L.fontes.slice(L.pag).find(x => x.item && x.item !== f.item);
+  $('lTitulo').textContent = f.item.titulo + (prox ? `  ·  depois: ${prox.item.titulo}` : '');
 }
 function irPara(n, inst) {
   n = Math.max(1, Math.min(totalPag(), n)); L.pag = n;
-  $('lPag').textContent = `${n}/${totalPag()}`;
+  $('lPag').textContent = `${n}/${totalPag()}`; tituloCulto();
   const p = L.paginas[n - 1]; if (p) p.el.scrollIntoView({ behavior: inst ? 'auto' : 'smooth', block: 'start' });
 }
+// Modo culto: a página inteira cabe na tela (largura limitada pela altura), sem precisar rolar
+function largDaPagina(ar) {
+  const box = $('lPaginas'), w = box.clientWidth * L.escala;
+  if (!L.culto || L.escala > 1) return Math.round(w);
+  return Math.round(Math.min(w, (box.clientHeight - 16) * ar));
+}
 async function renderPag(p) {
-  const larg = Math.round($('lPaginas').clientWidth * L.escala);
+  const src = L.fontes[p.n - 1], dpr = Math.min(2, window.devicePixelRatio || 1);
+  let pgPdf = null, ar = 1 / 1.4142;
+  if (src.tipo !== 'texto') { pgPdf = await src.doc.getPage(src.n); const v = pgPdf.getViewport({ scale: 1 }); ar = v.width / v.height; }
+  const larg = largDaPagina(ar);
   if (p.render && p.larg === larg) return;
   p.larg = larg;
-  const src = L.fontes[p.n - 1], dpr = Math.min(2, window.devicePixelRatio || 1);
   const cv = p.el.querySelector('.l-pdf'), tinta = p.el.querySelector('.l-tinta');
   p.el.style.width = larg + 'px';
   if (src.tipo === 'texto') {
@@ -2887,7 +3152,7 @@ async function renderPag(p) {
     desenharTexto(cv.getContext('2d'), src.pg, cv.width, cv.height);
     p.render = { cancel() {} };
   } else {
-    const pg = await src.doc.getPage(src.n);
+    const pg = pgPdf;
     const vp1 = pg.getViewport({ scale: 1 });
     const vp = pg.getViewport({ scale: larg / vp1.width * dpr });
     p.el.style.aspectRatio = `${vp1.width} / ${vp1.height}`;
@@ -3000,6 +3265,11 @@ function ligarTinta(p) {
   });
   const fim = () => { if (atual) { atual = null; pintarTinta(p); salvarAnot(p.n); } };
   cv.addEventListener('pointerup', fim); cv.addEventListener('pointercancel', fim);
+  // Apple Pencil: no iPad o Safari rola a página com a caneta se não for barrado aqui (o dedo continua rolando)
+  const caneta = e => [...e.touches].some(t => t.touchType === 'stylus');
+  cv.addEventListener('touchstart', e => { if (caneta(e)) { L.ultCaneta = Date.now(); e.preventDefault(); } }, { passive: false });
+  cv.addEventListener('touchmove', e => { if (caneta(e)) e.preventDefault(); }, { passive: false });
+  cv.addEventListener('pointerdown', e => { if (e.pointerType === 'pen') L.ultCaneta = Date.now(); });
 }
 function apagarEm(p, x, y) {
   const arr = L.anot[p.n] || [], raio = 0.02, antes = arr.length;
@@ -3108,6 +3378,11 @@ const estudoLivro = (() => {
     if (t && meta && bom && bpm < meta) { s.bpm = Math.min(meta, bpm + 4); progPlano[t.id] = s; salvarPlano(); bpmEl().value = s.bpm; sobe = `Saiu firme! Próxima vez: ♩=${s.bpm}.`; }
     else if (t && meta && bom && bpm >= meta) sobe = 'Você chegou na meta. Pode marcar como feito ✅.';
     else if (t && meta) { s.bpm = bpm; progPlano[t.id] = s; salvarPlano(); sobe = 'Repita neste andamento até sair firme (pratique mais lentamente, entendendo os ritmos).'; }
+    if (t && t.hino) {   // Hino do dia: guarda o andamento e, se saiu firme, conclui a parte do dia
+      s.bpm = bpm; progPlano[t.id] = s; salvarPlano();
+      if (bom) { sobe = 'Hino firme (acima de 80% no tempo e na afinação)! Parte do dia concluída. ✅'; if (window.hinoBom) window.hinoBom(); }
+      else sobe = 'Ainda não passou de 80% no tempo e na afinação. Repita mais devagar, marcando as respirações com a caneta.';
+    }
     const piores = r.porNota.filter(x => Math.abs(x.c) > 12).slice(0, 5);
     res.innerHTML = `<div class="l-res-lin"><span>Notas <b>${r.n}</b></span><span>No tempo <b>${Math.round(r.pTempo * 100)}%</b></span><span>Afinadas <b>${Math.round(r.pAfin * 100)}%</b></span><span>Média <b>${r.mediaC > 0 ? '+' : ''}${r.mediaC}¢</b></span></div>` +
       (piores.length ? `<div>Mais desafinadas: ${piores.map(x => `<b>${esc(x.nome)}</b> ${x.c > 0 ? '+' : ''}${x.c}¢`).join(' · ')}</div>` : '<div>Nenhuma nota com desvio grande. 👏</div>') +
@@ -3145,10 +3420,14 @@ async function rpListar() {
   const box = $('rpLista'); if (!box) return;
   let lista = [];
   try { lista = await idbAll('repert'); } catch (e) { box.innerHTML = '<p class="note">Este navegador não permite guardar arquivos (modo privado?).</p>'; return; }
-  lista.sort((a, b) => b.criado - a.criado);
-  box.innerHTML = lista.length ? lista.map(r => `<div class="bib-item"><button class="bib-abrir" data-id="${r.id}"><b>📑 ${esc(r.nome)}</b><small>${r.itens.length} ${r.itens.length === 1 ? 'item' : 'itens'}${r.data ? ' · ' + esc(r.data) : ''}</small></button></div>`).join('')
+  lista = lista.filter(r => r.id !== 'rp-culto').sort((a, b) => b.criado - a.criado);   // a lista do culto fica na aba Culto
+  box.innerHTML = lista.length ? lista.map(r => `<div class="bib-item"><button class="bib-abrir" data-id="${r.id}"><b>📑 ${esc(r.nome)}</b><small>${r.itens.length} ${r.itens.length === 1 ? 'item' : 'itens'}${r.data ? ' · ' + esc(r.data) : ''} · toque para editar</small></button>${r.itens.length ? `<button class="b mini" data-tocar-rp="${r.id}" title="Tocar">▶</button>` : ''}</div>`).join('')
     : '<p class="note">Nenhum repertório ainda. Crie um (ex.: "Casamento Ana & João") e adicione os hinos em PDF e as cifras.</p>';
   box.querySelectorAll('.bib-abrir').forEach(b => b.onclick = () => rpEditar(b.dataset.id));
+  box.querySelectorAll('[data-tocar-rp]').forEach(b => b.onclick = async () => {
+    const r = await idbGet('repert', b.dataset.tocarRp); if (!r) return;
+    mostrarLeitor(r.nome, true); const { fontes, docs } = await rpFontes(r, true); abrirFontes(fontes, docs, 1, null);
+  });
 }
 async function rpNovo() {
   const nome = prompt('Nome do repertório (ex.: Casamento Ana & João):'); if (!nome) return;
@@ -3160,9 +3439,10 @@ async function rpEditar(id) {
   RP.atual = await idbGet('repert', id); if (!RP.atual) return;
   $('rpListaBox').hidden = true; $('rpEditor').hidden = false;
   $('rpNome').value = RP.atual.nome; $('rpData').value = RP.atual.data || '';
-  rpDesenhar(); acBuscar();
+  rpDesenhar(); acBuscar(); ctBuscar();   // a busca do topo passa a adicionar neste repertório
+  $('rpEditor').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
-function rpFechar() { RP.atual = null; $('rpEditor').hidden = true; $('rpListaBox').hidden = false; $('rpCifraForm').hidden = true; rpListar(); acBuscar(); }
+function rpFechar() { RP.atual = null; $('rpEditor').hidden = true; $('rpListaBox').hidden = false; $('rpCifraForm').hidden = true; rpListar(); acBuscar(); ctBuscar(); }
 function rpDesenhar() {
   const it = RP.atual.itens, box = $('rpItens');
   box.innerHTML = it.length ? it.map((x, i) => `<div class="rp-item" data-i="${i}">
@@ -3236,7 +3516,7 @@ function rpTextoCifra(x) {
   } catch (e) { return { texto: x.texto, sub: '' }; }
 }
 // Monta a lista de páginas: sumário + cada item na ordem
-async function rpFontes(r) {
+async function rpFontes(r, semSumario) {
   prepararPdf();
   const fontes = [], docs = [], sumario = [];
   for (const x of r.itens) {
@@ -3252,6 +3532,7 @@ async function rpFontes(r) {
     }
     sumario.push([x.titulo, ini]);
   }
+  if (semSumario) return { fontes, docs };
   // sumário na 1ª página (os números já contam com ele)
   const larg = Math.max(...sumario.map(s => s[0].length), 10);
   const linhas = sumario.map(([t, p], i) => `${String(i + 1).padStart(2)}. ${t.padEnd(larg, ' ')}  ... pág. ${p + 1}`);
@@ -3355,7 +3636,7 @@ function acDesenhar() {
   box.querySelectorAll('[data-delc]').forEach(b => b.onclick = () => acExcluirColecao(b.dataset.delc));
   const sel = $('acColSel');
   if (sel) sel.innerHTML = nomes.map(c => `<option>${esc(c)}</option>`).join('') + '<option value="__nova">➕ Nova coleção…</option>';
-  acBuscar();
+  acBuscar(); ctFiltros();
 }
 function acAbrirSinc(col) {
   $('acSinc').hidden = false;
@@ -3449,27 +3730,30 @@ function acBuscar() {
   box.querySelectorAll('[data-id]').forEach(b => b.onclick = () => acAbrir(b.dataset.id));
   box.querySelectorAll('[data-add]').forEach(b => b.onclick = () => acParaRepertorio(b.dataset.add, b));
 }
-async function acAbrir(id, pag) {
+async function acAbrir(id, pag, culto) {
   const m = AC.meta.find(x => x.id === id), a = await idbGet('arquivos', id); if (!m || !a) return;
-  prepararPdf(); mostrarLeitor(m.titulo + (pag ? ` — pág. ${pag}` : ''));
+  prepararPdf(); mostrarLeitor(m.titulo + (pag ? ` — pág. ${pag}` : ''), culto);
   if (m.tipo === 'texto') { abrirFontes(paginarTexto(m.titulo, a.texto).map((pg, k) => ({ tipo: 'texto', pg, chave: 'acx:' + id + ':' + k })), [], 1, null); return; }
   const doc = await pdfjsLib.getDocument({ data: a.dados.slice(0) }).promise;
   const fontes = []; for (let n = 1; n <= doc.numPages; n++) fontes.push({ tipo: 'pdf', doc, n, chave: id + ':' + n });
   abrirFontes(fontes, [doc], pag || 1, null);
 }
 // pag (opcional): coloca só aquela página no repertório; titulo (opcional): nome do item
+// Item de repertório a partir de um arquivo do acervo (pag = só aquela página)
+async function itemDoAcervo(id, pag, titulo) {
+  const m = AC.meta.find(x => x.id === id), a = await idbGet('arquivos', id); if (!m || !a) return null;
+  if (m.tipo === 'texto') return { id: uid(), tipo: 'cifra', titulo: titulo || m.titulo, texto: a.texto, modo: 'acordes', st: 0 };
+  prepararPdf();
+  let paginas = m.paginas;
+  if (!paginas) { const doc = await pdfjsLib.getDocument({ data: a.dados.slice(0) }).promise; paginas = doc.numPages; doc.destroy(); m.paginas = paginas; idbPut('acervo', m); }
+  const it = { id: uid(), tipo: 'pdf', origem: 'acervo', ref: id, titulo: titulo || m.titulo, paginas };
+  if (pag) { it.de = it.ate = pag; }
+  return it;
+}
 async function acParaRepertorio(id, bt, pag, titulo) {
   if (!RP.atual) return;
-  const m = AC.meta.find(x => x.id === id), a = await idbGet('arquivos', id); if (!m || !a) return;
-  if (m.tipo === 'texto') RP.atual.itens.push({ id: uid(), tipo: 'cifra', titulo: titulo || m.titulo, texto: a.texto, modo: 'acordes', st: 0 });
-  else {
-    prepararPdf();
-    let paginas = m.paginas;
-    if (!paginas) { const doc = await pdfjsLib.getDocument({ data: a.dados.slice(0) }).promise; paginas = doc.numPages; doc.destroy(); m.paginas = paginas; idbPut('acervo', m); }
-    const it = { id: uid(), tipo: 'pdf', origem: 'acervo', ref: id, titulo: titulo || m.titulo, paginas };
-    if (pag) { it.de = it.ate = pag; }
-    RP.atual.itens.push(it);
-  }
+  const it = await itemDoAcervo(id, pag, titulo); if (!it) return;
+  RP.atual.itens.push(it);
   await rpSalvar(); rpDesenhar();
   if (bt) { bt.textContent = '✓ Adicionado'; bt.disabled = true; }
 }
@@ -3498,14 +3782,12 @@ async function acIndice(m) {
   }
   return (AC.txt[m.id] = idx);
 }
-async function acBuscarDentro() {
-  const q0 = $('acBusca').value.trim(), q = normal(q0);
-  const box = $('acDentro'), st = $('acStatus');
-  if (!q) { box.innerHTML = '<p class="note">Digite o número (ex.: 656) ou o nome do louvor na busca acima.</p>'; return; }
+// Procura o número ou as palavras no texto de cada página dos PDFs (lista = metadados do acervo a varrer)
+async function buscarNoTexto(q, lista, st) {
   const num = /^\d+$/.test(q), re = num ? new RegExp('(^|[^0-9])' + q + '(?![0-9])') : null, palavras = q.split(/\s+/);
   const achados = []; let semTexto = 0, i = 0;
-  for (const m of AC.meta) {
-    i++; if (!AC.txt[m.id]) st.textContent = `Lendo os PDFs (só na 1ª vez)… ${i} de ${AC.meta.length}`;
+  for (const m of lista) {
+    i++; if (!AC.txt[m.id] && st) st.textContent = `Lendo os PDFs (só na 1ª vez)… ${i} de ${lista.length}`;
     let idx; try { idx = await acIndice(m); } catch (e) { continue; }
     if (m.tipo === 'pdf' && idx.every(t => !t.trim())) { semTexto++; continue; }
     idx.forEach((t, k) => {
@@ -3515,9 +3797,16 @@ async function acBuscarDentro() {
       if (pos >= 0) achados.push({ m, pag: k + 1, pos, trecho: t.slice(Math.max(0, pos - 25), pos + 70) });
     });
   }
-  st.textContent = '';
+  if (st) st.textContent = '';
   // o número/título no começo da página (cabeçalho do louvor) vem primeiro
   achados.sort((a, b) => (a.pos > 120) - (b.pos > 120) || a.pos - b.pos);
+  return { achados, semTexto, num };
+}
+async function acBuscarDentro() {
+  const q0 = $('acBusca').value.trim(), q = normal(q0);
+  const box = $('acDentro'), st = $('acStatus');
+  if (!q) { box.innerHTML = '<p class="note">Digite o número (ex.: 656) ou o nome do louvor na busca acima.</p>'; return; }
+  const { achados, semTexto, num } = await buscarNoTexto(q, AC.meta, st);
   const podeAdd = !!RP.atual, mostra = achados.slice(0, 30);
   const tituloItem = r => num ? `Nº ${q0} · ${r.m.titulo}` : q0.replace(/^./, c => c.toUpperCase());
   box.innerHTML = `<div class="ac-dentro-tit">Dentro dos PDFs: ${achados.length ? `${achados.length} página${achados.length > 1 ? 's' : ''}` : 'nada encontrado'}${achados.length > 30 ? ' (mostrando 30)' : ''}</div>` +
@@ -3529,7 +3818,283 @@ async function acBuscarDentro() {
   box.querySelectorAll('[data-addp]').forEach(b => b.onclick = () => { const r = mostra[+b.dataset.addp]; acParaRepertorio(r.m.id, b, r.pag, tituloItem(r)); });
 }
 
-window.rpTestar = { paginarTexto, rpFontes, acSincronizar };   // para testes
+// ---------- Aba Culto: achar o hino rápido e tocar ----------
+// Grupos do acervo pelo nome da coleção/pasta: Coletâneas, Estudos (métodos) e Partituras (o resto: hinos e arranjos avulsos)
+function grupoDe(m) {
+  const t = normal(m.colecao + ' ' + m.nome);
+  if (/colet|hinari|harpa|cantor|binder/.test(t)) return 'colet';
+  if (/estud|metodo|tecnica|exercic|apostila|clarke|arban|rotina|aquecimento/.test(t)) return 'estudo';
+  return 'partitura';
+}
+const GRUPOS = { todos: 'Tudo', partitura: '🎼 Partituras', colet: '📚 Coletâneas', estudo: '🎺 Estudos' };
+const CT = { grupo: 'todos', lista: null };
+const CT_ID = 'rp-culto';
+async function ctCarregarLista() {
+  CT.lista = (await idbGet('repert', CT_ID).catch(() => null)) || { id: CT_ID, nome: 'Culto de hoje', data: '', itens: [], criado: 0, culto: true };
+}
+const ctSalvar = () => idbPut('repert', CT.lista);
+function ctFiltros() {
+  const box = $('ctFiltros'); if (!box) return;
+  const cont = { todos: AC.meta.length, partitura: 0, colet: 0, estudo: 0 };
+  AC.meta.forEach(m => cont[grupoDe(m)]++);
+  box.innerHTML = Object.keys(GRUPOS).map(g => `<button class="b mini ${CT.grupo === g ? '' : 'b2'}" data-g="${g}">${GRUPOS[g]} <small>${cont[g]}</small></button>`).join('');
+  box.querySelectorAll('[data-g]').forEach(b => b.onclick = () => { CT.grupo = b.dataset.g; ctFiltros(); ctBuscar(); });
+}
+const ctDoGrupo = () => CT.grupo === 'todos' ? AC.meta : AC.meta.filter(m => grupoDe(m) === CT.grupo);
+function ctLinha(m, pag, sub, k) {
+  return `<div class="ac-res ct-res"><button class="ac-abrir" data-k="${k}">${m.tipo === 'pdf' ? '📄' : '🎸'} ${esc(m.titulo)}${pag ? ` — pág. ${pag}` : ''}<small>${esc(sub)}</small></button>
+    <button class="b mini" data-tocar="${k}">▶</button><button class="b b2 mini" data-lista="${k}">${RP.atual ? '+ Repertório' : '+ Lista'}</button></div>`;
+}
+let ctRes = [];
+function ctLigar(box) {
+  box.querySelectorAll('[data-k]').forEach(b => b.onclick = () => { const r = ctRes[+b.dataset.k]; acAbrir(r.m.id, r.pag, true); });
+  box.querySelectorAll('[data-tocar]').forEach(b => b.onclick = () => { const r = ctRes[+b.dataset.tocar]; acAbrir(r.m.id, r.pag, true); });
+  box.querySelectorAll('[data-lista]').forEach(b => b.onclick = async () => {
+    const r = ctRes[+b.dataset.lista];
+    const it = await itemDoAcervo(r.m.id, r.pag, r.titulo); if (!it) return;
+    if (RP.atual) { RP.atual.itens.push(it); await rpSalvar(); rpDesenhar(); }   // editando um repertório: vai para ele
+    else { CT.lista.itens.push(it); await ctSalvar(); ctDesenharLista(); }
+    b.textContent = '✓'; b.disabled = true;
+  });
+}
+// Busca pelo nome do arquivo (instantânea); Enter / botão procura também dentro dos PDFs
+function ctBuscar() {
+  const box = $('ctRes'); if (!box) return;
+  const q0 = $('ctBusca').value.trim(), q = normal(q0);
+  if (!AC.meta.length) { box.innerHTML = '<p class="note">O acervo está vazio. Em 📚 Acervo (no fim desta aba), sincronize as pastas Partituras, Coletâneas e Estudos.</p>'; return; }
+  if (!q) { box.innerHTML = ''; ctRes = []; return; }
+  const palavras = q.split(/\s+/);
+  const num = /^\d+$/.test(q), reNum = num ? new RegExp('(^|[^0-9])' + q + '(?![0-9])') : null;
+  const achados = ctDoGrupo().filter(m => { const t = normal(m.nome); return num ? reNum.test(t) : palavras.every(p => t.includes(p)); })
+    .sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt', { numeric: true })).slice(0, 40);
+  ctRes = achados.map(m => ({ m, pag: null, titulo: m.titulo }));
+  box.innerHTML = (achados.length ? achados.map((m, k) => ctLinha(m, null, m.colecao + (m.nome.includes('/') ? ' · ' + m.nome.replace(/\/[^/]*$/, '') : ''), k)).join('') : '<p class="note">Nenhum arquivo com esse nome.</p>') +
+    `<button class="b b2" id="ctDentro" style="width:100%;margin-top:6px">🔎 Procurar "${esc(q0)}" dentro das ${GRUPOS[CT.grupo] === 'Tudo' ? 'partituras e coletâneas' : GRUPOS[CT.grupo].replace(/^\S+ /, '').toLowerCase()}</button>`;
+  ctLigar(box);
+  $('ctDentro').onclick = ctBuscarDentro;
+}
+async function ctBuscarDentro() {
+  const q0 = $('ctBusca').value.trim(), q = normal(q0), box = $('ctRes'); if (!q) return;
+  const { achados, semTexto, num } = await buscarNoTexto(q, ctDoGrupo().filter(m => m.tipo === 'pdf' || m.tipo === 'texto'), $('ctStatus'));
+  const base = ctRes.filter(r => !r.pag), ja = new Set(base.map(r => r.m.id));
+  const mais = achados.filter(r => !(ja.has(r.m.id) && r.pag === 1)).slice(0, 30)
+    .map(r => ({ m: r.m, pag: r.pag, titulo: num ? `Nº ${q0} · ${r.m.titulo}` : q0.replace(/^./, c => c.toUpperCase()), trecho: r.trecho }));
+  ctRes = base.concat(mais);
+  box.innerHTML = base.map((r, k) => ctLinha(r.m, null, r.m.colecao, k)).join('') +
+    `<div class="ac-dentro-tit">Dentro dos PDFs: ${achados.length ? `${achados.length} página${achados.length > 1 ? 's' : ''}` : 'nada encontrado'}${achados.length > 30 ? ' (mostrando 30)' : ''}</div>` +
+    mais.map((r, j) => ctLinha(r.m, r.pag, '…' + r.trecho + '…', base.length + j)).join('') +
+    (semTexto ? `<p class="note">${semTexto} PDF${semTexto > 1 ? 's são imagens escaneadas' : ' é imagem escaneada'}: neles a busca só acha pelo nome do arquivo.</p>` : '');
+  ctLigar(box);
+}
+function ctDesenharLista() {
+  const box = $('ctLista'); if (!box || !CT.lista) return;
+  const it = CT.lista.itens;
+  box.innerHTML = it.length ? it.map((x, i) => `<div class="rp-item" data-i="${i}"><span class="rp-n">${i + 1}</span>
+      <button class="rp-tit" data-a="tocar">${x.tipo === 'pdf' ? '📄' : '🎸'} ${esc(x.titulo)}<small>${x.tipo === 'pdf' ? (x.de ? `pág. ${x.de}${x.ate > x.de ? '–' + x.ate : ''}` : `${x.paginas} pág.`) : 'cifra'}</small></button>
+      <button class="b b2 mini" data-a="up" ${i ? '' : 'disabled'}>↑</button><button class="b b2 mini" data-a="down" ${i < it.length - 1 ? '' : 'disabled'}>↓</button><button class="b b2 mini" data-a="del">✕</button></div>`).join('')
+    : '<p class="note">Busque os hinos acima e toque em "+ Lista" na ordem do culto. No culto, é só "▶ Tocar a lista" e tocar na borda da tela para virar a página.</p>';
+  box.querySelectorAll('.rp-item').forEach(row => row.querySelectorAll('[data-a]').forEach(b => b.onclick = async () => {
+    const i = +row.dataset.i, a = b.dataset.a;
+    if (a === 'tocar') return ctTocar(i);
+    if (a === 'up' && i) [it[i - 1], it[i]] = [it[i], it[i - 1]];
+    if (a === 'down' && i < it.length - 1) [it[i + 1], it[i]] = [it[i], it[i + 1]];
+    if (a === 'del') it.splice(i, 1);
+    await ctSalvar(); ctDesenharLista();
+  }));
+  $('ctTocar').disabled = !it.length; $('ctSalvarRp').disabled = !it.length;
+}
+// Abre a lista inteira no modo culto, começando no item i
+async function ctTocar(i) {
+  const r = CT.lista; if (!r.itens.length) return;
+  mostrarLeitor(r.nome, true);
+  const { fontes, docs } = await rpFontes(r, true);
+  const pag = (fontes.findIndex(f => f.item === r.itens[i || 0]) + 1) || 1;
+  abrirFontes(fontes, docs, pag, null);
+}
+async function ctReperts() {
+  const box = $('ctReperts'); if (!box) return;
+  const lista = (await idbAll('repert').catch(() => [])).filter(r => r.id !== CT_ID && r.itens.length).sort((a, b) => b.criado - a.criado);
+  box.innerHTML = lista.length ? lista.map(r => `<div class="bib-item"><button class="bib-abrir" data-rp="${r.id}"><b>▶ ${esc(r.nome)}</b><small>${r.itens.length} itens${r.data ? ' · ' + esc(r.data) : ''}</small></button></div>`).join('') : '<p class="note">Nenhum repertório salvo ainda.</p>';
+  box.querySelectorAll('[data-rp]').forEach(b => b.onclick = async () => {
+    const r = await idbGet('repert', b.dataset.rp); if (!r) return;
+    mostrarLeitor(r.nome, true); const { fontes, docs } = await rpFontes(r, true); abrirFontes(fontes, docs, 1, null);
+  });
+}
+async function ctEntrar() {
+  if (!CT.lista) await ctCarregarLista();
+  ctFiltros(); ctBuscar(); ctDesenharLista(); ctReperts();
+}
+window.cultoEntrar = ctEntrar;
+
+// ---------- Hino do dia (aba Estudo): da lista do próximo culto; vazia = rodízio no acervo ----------
+async function hinoDoDia(desloc) {
+  if (!AC.meta.length) { try { AC.meta = await idbAll('acervo'); } catch (e) {} }
+  if (!CT.lista) await ctCarregarLista().catch(() => {});
+  const dia = Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000);
+  const daLista = (CT.lista ? CT.lista.itens : []).filter(x => x.tipo === 'pdf' && x.origem === 'acervo' && AC.meta.some(m => m.id === x.ref));
+  if (daLista.length) {
+    const x = daLista[((desloc || 0) % daLista.length + daLista.length) % daLista.length];
+    return { m: AC.meta.find(m => m.id === x.ref), pag: x.de || null, titulo: x.titulo, origem: 'lista', total: daLista.length };
+  }
+  const hinos = AC.meta.filter(m => m.tipo === 'pdf' && grupoDe(m) === 'partitura' && !ehCifra(m)).sort((a, b) => a.id < b.id ? -1 : 1);
+  if (!hinos.length) return null;
+  const m = hinos[(((dia * 7919) + (desloc || 0)) % hinos.length + hinos.length) % hinos.length];
+  return { m, pag: null, titulo: m.titulo, origem: 'acervo', total: hinos.length };
+}
+async function estudarHino(h) {
+  await acAbrir(h.m.id, h.pag, false);
+  L.tarefa = { id: 'hino:' + h.m.id, nome: h.titulo, hino: true };
+  estudoLivro.preparar(L.tarefa);
+  $('lMeta').textContent = 'grave e passe de 80%';
+}
+// Abre um método do acervo (etapas da metodologia) já na seção pedida, achando a página pelo texto do PDF
+async function abrirMetodo(chave, busca, rotulo) {
+  if (!AC.meta.length) { try { AC.meta = await idbAll('acervo'); } catch (e) {} }
+  const re = typeof LIVROS_REF !== 'undefined' && LIVROS_REF[chave];
+  const cand = AC.meta.filter(m => m.tipo === 'pdf' && re && re.test(m.titulo)).sort((a, b) => (grupoDe(b) === 'estudo') - (grupoDe(a) === 'estudo') || (a.tam || 0) - (b.tam || 0));
+  if (!cand.length) { alert(`Não achei "${rotulo}" no acervo. Sincronize a pasta Estudos (Acervo Trompete › Estudos) em ⛪ Culto › 📚 Acervo.`); return; }
+  const m = cand[0]; let pag = null;
+  if (busca) {
+    try {
+      toastB('Procurando a seção no método…');
+      const idx = await acIndice(m), q = normal(busca);
+      let melhor = -1;
+      idx.forEach((t, k) => { if (k < 2 || melhor >= 0) return; const p = t.indexOf(q); if (p >= 0 && p < 300) melhor = k; });   // no começo da página = título da seção (pula capa e sumário)
+      if (melhor < 0) idx.forEach((t, k) => { if (melhor < 0 && k >= 2 && t.includes(q)) melhor = k; });
+      if (melhor >= 0) pag = melhor + 1;
+    } catch (e) {}
+  }
+  await acAbrir(m.id, pag, false);
+  if (busca && !pag) toastB('Não achei a seção pelo texto (PDF escaneado?). Use o número da página no topo para ir até ela.');
+}
+window.abrirMetodo = abrirMetodo;
+window.hinoDoDia = hinoDoDia;
+window.estudarHino = estudarHino;
+
+// ---------- Da aba Transpor para o Culto ----------
+// Guarda o resultado no acervo (coleção "Minhas transposições", aparece na busca) e põe no fim da Lista de hoje.
+const COL_MINHAS = 'Minhas transposições';
+async function mandarParaCulto(o) {   // o = { titulo, texto } (cifra) | { titulo, dados: ArrayBuffer } (PDF)
+  const id = 'ac' + uid(), texto = o.texto != null;
+  const nome = o.titulo.replace(/[\\/:*?"<>|]+/g, ' ').trim() + (texto ? '.txt' : '.pdf');
+  await idbPut('arquivos', texto ? { texto: o.texto } : { dados: o.dados }, id);
+  const meta = { id, colecao: COL_MINHAS, nome, titulo: o.titulo, tipo: texto ? 'texto' : 'pdf', tam: texto ? o.texto.length : o.dados.byteLength, mod: Date.now() };
+  await idbPut('acervo', meta); AC.meta.push(meta); acDesenhar();
+  if (!CT.lista) await ctCarregarLista();
+  const it = await itemDoAcervo(id, null, o.titulo); if (it) { CT.lista.itens.push(it); await ctSalvar(); ctDesenharLista(); }
+  toastB(`"${o.titulo}" foi para a Lista de hoje (aba Culto) e ficou guardado no acervo.`);
+}
+// Partitura desenhada (SVG do abcjs) → PDF A4; corta as páginas numa faixa branca entre os sistemas
+async function svgParaPdf(svg, titulo) {
+  const W = 1240, A4 = Math.round(W * 1.4142), mg = 60;
+  const clone = svg.cloneNode(true), vb = svg.viewBox && svg.viewBox.baseVal;
+  const w0 = vb && vb.width || svg.getBoundingClientRect().width, h0 = vb && vb.height || svg.getBoundingClientRect().height;
+  clone.setAttribute('width', w0); clone.setAttribute('height', h0); clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml' }));
+  const img = await new Promise((ok, err) => { const i = new Image(); i.onload = () => ok(i); i.onerror = err; i.src = url; });
+  URL.revokeObjectURL(url);
+  const larg = W - 2 * mg, alt = Math.round(larg * h0 / w0);
+  const cv = document.createElement('canvas'); cv.width = larg; cv.height = alt;
+  const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, larg, alt); g.drawImage(img, 0, 0, larg, alt);
+  const px = g.getImageData(0, 0, larg, alt).data;
+  const branca = y => { for (let x = 0; x < larg; x += 3) { const k = (y * larg + x) * 4; if (px[k] < 235 || px[k + 1] < 235 || px[k + 2] < 235) return false; } return true; };
+  const out = await PDFLib.PDFDocument.create(); out.setTitle(titulo);
+  let y0 = 0;
+  while (y0 < alt) {
+    let y1 = Math.min(alt, y0 + A4 - 2 * mg);
+    if (y1 < alt) { let y = y1; while (y > y0 + 200 && !branca(y)) y--; if (y > y0 + 200) y1 = y; }
+    const pc = document.createElement('canvas'); pc.width = W; pc.height = A4;
+    const pg = pc.getContext('2d'); pg.fillStyle = '#fff'; pg.fillRect(0, 0, W, A4); pg.drawImage(cv, 0, y0, larg, y1 - y0, mg, mg, larg, y1 - y0);
+    const jpg = await out.embedJpg(await (await fetch(pc.toDataURL('image/jpeg', 0.9))).arrayBuffer());
+    const P = out.addPage([595.28, 841.89]); P.drawImage(jpg, { x: 0, y: 0, width: 595.28, height: 841.89 });
+    y0 = y1;
+  }
+  return (await out.save()).buffer;
+}
+window.mandarParaCulto = mandarParaCulto;
+window.svgParaPdf = svgParaPdf;
+
+// ---------- Colar a lista do culto (texto do WhatsApp) e montar sozinho ----------
+// Cada linha vira um louvor: número (656, "nº 656", "hino 656") e/ou nome. Tira marcadores (1., -, •), rótulos ("Ceia:"),
+// negrito do WhatsApp, emojis, datas e horários. Linha com vários números separados por vírgula vira vários louvores.
+function lerListaCulto(txt) {
+  const out = [];
+  const CABEC = /^(culto|louvor(es)?|hinos?|lista|escala|ensaio|repertorio|programacao|ordem|cantico(s)?|musica(s)?)\b/;
+  for (let l of String(txt).split(/\r?\n/)) {
+    l = l.replace(/[*_~`]/g, ' ').replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu, ' ')
+      .replace(/\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/g, ' ').replace(/\b\d{1,2}\s*[:h]\s*\d{2}\b/gi, ' ').replace(/\s+/g, ' ').trim();
+    l = l.replace(/^[-•·>▪◦–—+]+\s*/, '').replace(/^\d{1,2}\s*[.)ºª°]\s+(?=\S)/, '').trim();
+    if (!l) continue;
+    const rot = l.match(/^([^:\d]{1,25}):\s*(.*)$/);
+    if (rot) { if (!rot[2].trim()) continue; l = rot[2].trim(); }
+    const nl = normal(l);
+    if (CABEC.test(nl) && !/\d/.test(l) && nl.split(' ').length <= 3) continue;
+    let partes = l.split(/\s*[,;]\s*|\s+e\s+(?=(?:n[º°o.]?\s*)?\d)/i).map(s => s.trim()).filter(Boolean);
+    if (partes.length < 2 || !partes.some(p => /^(n[º°o.]?\s*|hino\s*)?\d{1,4}$/i.test(p))) partes = [l];
+    for (const p of partes) {
+      const mn = p.match(/(?:^|[^\d])(\d{1,4})(?!\d)/);
+      const num = mn ? mn[1] : null;
+      const nome = p.replace(/\b(hino|louvor|n[º°o]\.?|numero)\b\s*/gi, ' ').replace(num ? new RegExp('(^|[^\\d])' + num + '(?!\\d)') : /$^/, '$1').replace(/^[\s\-–—.:]+|[\s\-–—.:]+$/g, '').replace(/\s+/g, ' ').trim();
+      if (!num && normal(nome).replace(/[^a-z]/g, '').length < 3) continue;
+      out.push({ orig: p, num, nome });
+    }
+  }
+  return out;
+}
+const PALAVRAS_VAZIAS = new Set(['o', 'a', 'os', 'as', 'de', 'do', 'da', 'dos', 'das', 'e', 'em', 'no', 'na', 'um', 'uma', 'meu', 'minha', 'que', 'ao', 'pdf', 'trompete', 'sib', 'bb']);
+const palavrasDe = s => normal(s).replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(w => w && !PALAVRAS_VAZIAS.has(w) && !/^\d+$/.test(w));
+const ehCifra = m => m.tipo === 'texto' || /cifra/.test(normal(m.colecao + ' ' + m.nome));
+// Acha a partitura e a cifra de um louvor da lista: 1º pelo nome do arquivo, depois dentro dos PDFs (cabeçalho da página)
+async function acharLouvor(e) {
+  const pool = AC.meta.filter(m => grupoDe(m) !== 'estudo');
+  const pal = palavrasDe(e.nome), reNum = e.num ? new RegExp('(^|[^0-9])' + e.num + '(?![0-9])') : null;
+  const nota = m => {
+    const t = normal(m.titulo), tw = palavrasDe(m.titulo);
+    const okNum = reNum ? reNum.test(t) : false;
+    const acertos = pal.filter(w => tw.includes(w) || t.includes(w)).length;
+    const okNome = pal.length ? acertos === pal.length : false;
+    if (okNum && (okNome || !pal.length)) return 3;
+    if (okNome && (!e.num || !/\d{2,}/.test(t))) return 2;
+    if (okNum && acertos >= Math.ceil(pal.length / 2)) return 1;
+    return 0;
+  };
+  const melhorArq = lista => { let b = null, bn = 0; for (const m of lista) { const n = nota(m); if (n > bn) { bn = n; b = m; } } return b; };
+  const dentro = async lista => {
+    const q = e.num || normal(e.nome); if (!q || !lista.length) return null;
+    const { achados } = await buscarNoTexto(q, lista, $('ctStatus'));
+    const r = achados[0]; if (!r) return null;
+    return { m: r.m, pag: r.pag, confira: r.pos > 150 };
+  };
+  const partArq = melhorArq(pool.filter(m => !ehCifra(m) && m.tipo === 'pdf'));
+  const cifArq = melhorArq(pool.filter(ehCifra));
+  const part = partArq ? { m: partArq, pag: null } : await dentro(pool.filter(m => !ehCifra(m) && m.tipo === 'pdf'));
+  const cif = cifArq ? { m: cifArq, pag: null } : await dentro(pool.filter(ehCifra));
+  return { part, cif };
+}
+async function ctMontarDaLista() {
+  const txt = $('ctColarTxt').value, st = $('ctColarRes');
+  const louvores = lerListaCulto(txt);
+  if (!louvores.length) { st.innerHTML = '<p class="note">Não achei nenhum louvor no texto. Escreva um por linha (número e/ou nome).</p>'; return; }
+  if (!AC.meta.length) { st.innerHTML = '<p class="note">O acervo está vazio: sincronize as pastas em 📚 Acervo, no fim desta aba.</p>'; return; }
+  if (CT.lista.itens.length && !confirm(`A lista de hoje já tem ${CT.lista.itens.length} itens. Trocar pela lista colada? (Cancelar = acrescentar no fim)`)) {} else CT.lista.itens = [];
+  const linhas = [];
+  for (let i = 0; i < louvores.length; i++) {
+    const e = louvores[i];
+    st.innerHTML = `<p class="note">Procurando ${i + 1} de ${louvores.length}: ${esc(e.orig)}…</p>`;
+    const { part, cif } = await acharLouvor(e);
+    const titulo = e.num && e.nome ? `${e.num} · ${e.nome}` : e.nome || `Nº ${e.num}`;
+    if (part) { const it = await itemDoAcervo(part.m.id, part.pag, titulo); if (it) CT.lista.itens.push(it); }
+    if (cif) { const it = await itemDoAcervo(cif.m.id, cif.pag, titulo + ' (cifra)'); if (it) CT.lista.itens.push(it); }
+    const conf = (part && part.confira) || (cif && cif.confira);
+    linhas.push(!part && !cif ? `<li class="er">⚠️ <b>${esc(e.orig)}</b>: não tem cifra nem partitura no acervo</li>`
+      : `<li>${conf ? '🔍' : '✅'} <b>${esc(e.orig)}</b>: ${[part && 'partitura' + (part.pag ? ` (${esc(part.m.titulo)}, pág. ${part.pag})` : ''), cif && 'cifra' + (cif.pag ? ` (pág. ${cif.pag})` : '')].filter(Boolean).join(' + ')}${conf ? ' — confira se é o louvor certo' : ''}</li>`);
+  }
+  await ctSalvar(); ctDesenharLista();
+  const faltam = linhas.filter(l => l.includes('class="er"')).length;
+  st.innerHTML = `<div class="ac-dentro-tit">${louvores.length - faltam} de ${louvores.length} louvores encontrados${faltam ? ` · ${faltam} sem cifra nem partitura` : ''}</div><ul class="ct-relat">${linhas.join('')}</ul>`;
+}
+
+window.rpTestar = { paginarTexto, rpFontes, acSincronizar, grupoDe, lerListaCulto };   // para testes
 
 // ---------- Início ----------
 window.addEventListener('DOMContentLoaded', () => {
@@ -3553,6 +4118,32 @@ window.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('resize', () => { if (!$('leitor').hidden) L.paginas.forEach(p => { if (p.render) renderPag(p); }); });
   document.addEventListener('visibilitychange', () => { if (document.hidden) estudoLivro.parar(); });
   setFerr('mao');
+  // modo culto: toque na borda direita/esquerda vira a página; ✏️ mostra as ferramentas de anotação
+  $('lPaginas').addEventListener('click', e => {
+    if (!L.culto || L.ferr !== 'mao') return;
+    if (L.ultCaneta && Date.now() - L.ultCaneta < 800) return;   // escreveu com a caneta: não vira a página
+    const r = $('lPaginas').getBoundingClientRect(), x = (e.clientX - r.left) / r.width;
+    if (x > 0.62) irPara(L.pag + 1); else if (x < 0.38) irPara(L.pag - 1);
+  });
+  $('lEditar').onclick = () => { const on = $('leitor').classList.toggle('culto-edit'); if (!on) setFerr('mao'); };
+  if ($('ctBusca')) {
+    let tm = null;
+    $('ctBusca').oninput = () => { clearTimeout(tm); tm = setTimeout(ctBuscar, 150); };
+    $('ctBusca').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); ctBuscar(); ctBuscarDentro(); } };
+    $('ctTocar').onclick = () => ctTocar(0);
+    $('ctMontar').onclick = async () => { if (!CT.lista) await ctCarregarLista(); ctMontarDaLista(); };
+    $('ctFoto').onchange = e => {
+      const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+      const img = $('ctFotoImg'); if (img.src) URL.revokeObjectURL(img.src);
+      img.src = URL.createObjectURL(f); img.hidden = false; $('ctFotoDica').hidden = false;
+    };
+    $('ctLimpar').onclick = async () => { if (CT.lista.itens.length && !confirm('Começar uma lista nova? A lista atual sai (os arquivos continuam no acervo).')) return; CT.lista.itens = []; await ctSalvar(); ctDesenharLista(); };
+    $('ctSalvarRp').onclick = async () => {
+      const nome = prompt('Salvar esta lista como repertório. Nome:', 'Culto ' + new Date().toLocaleDateString('pt-BR')); if (!nome) return;
+      await idbPut('repert', { id: 'rp' + uid(), nome: nome.trim(), data: '', itens: CT.lista.itens.map(x => ({ ...x, id: uid() })), criado: Date.now() });
+      toastB('Salvo em Repertório: ' + nome); ctReperts(); rpListar();
+    };
+  }
   listar();
   // Repertório
   if ($('rpNovo')) {
@@ -3576,9 +4167,11 @@ window.addEventListener('DOMContentLoaded', () => {
     // navegador sem escolha de pasta (iPad antes do iPadOS 18.4): esconde o botão da pasta
     if (!('webkitdirectory' in document.createElement('input'))) $('acPastaLbl').hidden = true;
     $('acCancelar').onclick = () => { $('acSinc').hidden = true; };
-    $('acBusca').oninput = () => { acBuscar(); $('acDentro').innerHTML = ''; };
-    $('acBusca').onkeydown = e => { if (e.key === 'Enter') acBuscarDentro(); };
-    $('acBuscarDentro').onclick = acBuscarDentro;
+    if ($('acBusca')) {   // a busca agora é a do topo da aba Culto; estes só existem em versões antigas da tela
+      $('acBusca').oninput = () => { acBuscar(); $('acDentro').innerHTML = ''; };
+      $('acBusca').onkeydown = e => { if (e.key === 'Enter') acBuscarDentro(); };
+      $('acBuscarDentro').onclick = acBuscarDentro;
+    }
     acCarregar();
   }
 });
