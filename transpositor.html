@@ -14,7 +14,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
 <title>Transpositor</title>
-<script>window.APP_VERSAO = '20261127132608';</script>
+<script>window.APP_VERSAO = '20261127163152';</script>
 <style>
 :root{--azul:#1f3a5f;--ouro:#f2c14e;--fundo:#f4f1ea;--card:#fff;--txt:#1d1d1f;--sub:#6b6b70;--borda:#e2ddd2;--verm:#c0392b;--b2:#e7e2d6;--b2txt:#1f3a5f;--campo:#fff;--pre:#faf8f3;--h2:#1f3a5f;
   --seta:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%236b6b70' stroke-width='2'/%3E%3C/svg%3E")}
@@ -213,6 +213,9 @@ body.leitor-aberto{overflow:hidden}
 #leitor.culto .l-folha{scroll-snap-align:start;scroll-margin-top:8px}
 #leitor.culto .l-tit{font-size:15px}
 .ct-busca{font-size:20px!important;padding:12px 14px!important}
+.ct-nuvem{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px;margin:6px 0;padding:6px 10px;border-radius:10px;background:rgba(66,133,244,.10)}
+.ct-nuvem span{flex:1;min-width:160px}
+.ct-relat li.nv{opacity:.85}
 .ct-filtros{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
 .ct-res .b.mini{min-width:44px}
 .ciclo-dia{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:8px 0 2px;font-size:14px}.ciclo-dia label{margin-left:auto;font-size:12px;display:flex;align-items:center;gap:4px}.ciclo-dia select{width:auto;padding:4px 6px}
@@ -307,6 +310,7 @@ body.leitor-aberto{overflow:hidden}
     <h2 style="margin-top:0">⛪ Culto</h2>
     <input type="search" id="ctBusca" class="ct-busca" placeholder="🔍 Nº ou nome do hino" enterkeyhint="search" autocomplete="off">
     <div class="ct-filtros" id="ctFiltros"></div>
+    <div class="ct-nuvem" id="ctNuvem"></div>
     <div id="ctStatus" class="est-status"></div>
     <div id="ctRes"></div>
     <details class="acervo" id="ctColar" style="margin-top:10px"><summary><b>📋 Montar a lista pelo texto ou foto</b> <small>— a lista que o dirigente mandou</small></summary>
@@ -3845,12 +3849,24 @@ function ctLinha(m, pag, sub, k) {
   return `<div class="ac-res ct-res"><button class="ac-abrir" data-k="${k}">${m.tipo === 'pdf' ? '📄' : '🎸'} ${esc(m.titulo)}${pag ? ` — pág. ${pag}` : ''}<small>${esc(sub)}</small></button>
     <button class="b mini" data-tocar="${k}">▶</button><button class="b b2 mini" data-lista="${k}">${RP.atual ? '+ Repertório' : '+ Lista'}</button></div>`;
 }
+// resultado da nuvem: mesmo botões, ícone ☁️ (baixa ao tocar)
+function ctLinhaNv(n, k) {
+  return `<div class="ac-res ct-res"><button class="ac-abrir" data-k="${k}">☁️ ${esc(n.n.replace(/\.[^.]+$/, ''))}<small>${esc([n.f, n.c && n.c !== n.f ? n.c : ''].filter(Boolean).join(' · '))}</small></button>
+    <button class="b mini" data-tocar="${k}">▶</button><button class="b b2 mini" data-lista="${k}">${RP.atual ? '+ Repertório' : '+ Lista'}</button></div>`;
+}
 let ctRes = [];
+// item da nuvem: baixa primeiro (vira local)
+async function ctResolver(r) {
+  if (r.m) return true;
+  const m = await nvBaixarUI(r.nv); if (!m) return false;
+  r.m = m; return true;
+}
 function ctLigar(box) {
-  box.querySelectorAll('[data-k]').forEach(b => b.onclick = () => { const r = ctRes[+b.dataset.k]; acAbrir(r.m.id, r.pag, true); });
-  box.querySelectorAll('[data-tocar]').forEach(b => b.onclick = () => { const r = ctRes[+b.dataset.tocar]; acAbrir(r.m.id, r.pag, true); });
+  box.querySelectorAll('[data-k]').forEach(b => b.onclick = async () => { const r = ctRes[+b.dataset.k]; if (await ctResolver(r)) acAbrir(r.m.id, r.pag, true); });
+  box.querySelectorAll('[data-tocar]').forEach(b => b.onclick = async () => { const r = ctRes[+b.dataset.tocar]; if (await ctResolver(r)) acAbrir(r.m.id, r.pag, true); });
   box.querySelectorAll('[data-lista]').forEach(b => b.onclick = async () => {
     const r = ctRes[+b.dataset.lista];
+    if (!(await ctResolver(r))) return;
     const it = await itemDoAcervo(r.m.id, r.pag, r.titulo); if (!it) return;
     if (RP.atual) { RP.atual.itens.push(it); await rpSalvar(); rpDesenhar(); }   // editando um repertório: vai para ele
     else { CT.lista.itens.push(it); await ctSalvar(); ctDesenharLista(); }
@@ -3861,22 +3877,24 @@ function ctLigar(box) {
 function ctBuscar() {
   const box = $('ctRes'); if (!box) return;
   const q0 = $('ctBusca').value.trim(), q = normal(q0);
-  if (!AC.meta.length) { box.innerHTML = '<p class="note">O acervo está vazio. Em 📚 Acervo (no fim desta aba), sincronize as pastas Partituras, Coletâneas e Estudos.</p>'; return; }
+  if (!AC.meta.length && !NV.itens.length) { box.innerHTML = '<p class="note">O acervo está vazio. Entre com o Google (☁️ acima) para buscar no Drive, ou em 📚 Acervo (no fim desta aba) sincronize as pastas do aparelho.</p>'; return; }
   if (!q) { box.innerHTML = ''; ctRes = []; return; }
   const palavras = q.split(/\s+/);
   const num = /^\d+$/.test(q), reNum = num ? new RegExp('(^|[^0-9])' + q + '(?![0-9])') : null;
   const achados = ctDoGrupo().filter(m => { const t = normal(m.nome); return num ? reNum.test(t) : palavras.every(p => t.includes(p)); })
     .sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt', { numeric: true })).slice(0, 40);
-  ctRes = achados.map(m => ({ m, pag: null, titulo: m.titulo }));
-  box.innerHTML = (achados.length ? achados.map((m, k) => ctLinha(m, null, m.colecao + (m.nome.includes('/') ? ' · ' + m.nome.replace(/\/[^/]*$/, '') : ''), k)).join('') : '<p class="note">Nenhum arquivo com esse nome.</p>') +
-    `<button class="b b2" id="ctDentro" style="width:100%;margin-top:6px">🔎 Procurar "${esc(q0)}" dentro das ${GRUPOS[CT.grupo] === 'Tudo' ? 'partituras e coletâneas' : GRUPOS[CT.grupo].replace(/^\S+ /, '').toLowerCase()}</button>`;
+  const nuvem = nvAchar(q, CT.grupo, 30);
+  ctRes = achados.map(m => ({ m, pag: null, titulo: m.titulo })).concat(nuvem.map(n => ({ nv: n, pag: null, titulo: n.n.replace(/\.[^.]+$/, '') })));
+  box.innerHTML = (achados.length ? achados.map((m, k) => ctLinha(m, null, m.colecao + (m.nome.includes('/') ? ' · ' + m.nome.replace(/\/[^/]*$/, '') : ''), k)).join('') : nuvem.length ? '' : '<p class="note">Nenhum arquivo com esse nome.</p>') +
+    (nuvem.length ? `<div class="ac-dentro-tit">☁️ Na nuvem${nuvem.length >= 30 ? ' (30 primeiros, refine a busca)' : ''} <small>— toque para baixar</small></div>` + nuvem.map((n, j) => ctLinhaNv(n, achados.length + j)).join('') : '') +
+    (AC.meta.length ? `<button class="b b2" id="ctDentro" style="width:100%;margin-top:6px">🔎 Procurar "${esc(q0)}" dentro das ${GRUPOS[CT.grupo] === 'Tudo' ? 'partituras e coletâneas' : GRUPOS[CT.grupo].replace(/^\S+ /, '').toLowerCase()} do aparelho</button>` : '');
   ctLigar(box);
-  $('ctDentro').onclick = ctBuscarDentro;
+  if ($('ctDentro')) $('ctDentro').onclick = ctBuscarDentro;
 }
 async function ctBuscarDentro() {
   const q0 = $('ctBusca').value.trim(), q = normal(q0), box = $('ctRes'); if (!q) return;
   const { achados, semTexto, num } = await buscarNoTexto(q, ctDoGrupo().filter(m => m.tipo === 'pdf' || m.tipo === 'texto'), $('ctStatus'));
-  const base = ctRes.filter(r => !r.pag), ja = new Set(base.map(r => r.m.id));
+  const base = ctRes.filter(r => r.m && !r.pag), ja = new Set(base.map(r => r.m.id));
   const mais = achados.filter(r => !(ja.has(r.m.id) && r.pag === 1)).slice(0, 30)
     .map(r => ({ m: r.m, pag: r.pag, titulo: num ? `Nº ${q0} · ${r.m.titulo}` : q0.replace(/^./, c => c.toUpperCase()), trecho: r.trecho }));
   ctRes = base.concat(mais);
@@ -4034,7 +4052,8 @@ function lerListaCulto(txt) {
     for (const p of partes) {
       const mn = p.match(/(?:^|[^\d])(\d{1,4})(?!\d)/);
       const num = mn ? mn[1] : null;
-      const nome = p.replace(/\b(hino|louvor|n[º°o]\.?|numero)\b\s*/gi, ' ').replace(num ? new RegExp('(^|[^\\d])' + num + '(?!\\d)') : /$^/, '$1').replace(/^[\s\-–—.:]+|[\s\-–—.:]+$/g, '').replace(/\s+/g, ' ').trim();
+      // tira "hino", "louvor", "nº" só como rótulo (antes do número ou no começo): "A Deus seja o louvor" fica inteiro
+      const nome = p.replace(/(^|\s)(hino|louvor|n[º°o]\.?|numero)\s*(?=\d)/gi, ' ').replace(/^\s*(hino|louvor)\s+/i, ' ').replace(num ? new RegExp('(^|[^\\d])' + num + '(?!\\d)') : /$^/, '$1').replace(/^[\s\-–—.:]+|[\s\-–—.:]+$/g, '').replace(/\s+/g, ' ').trim();
       if (!num && normal(nome).replace(/[^a-z]/g, '').length < 3) continue;
       out.push({ orig: p, num, nome });
     }
@@ -4045,14 +4064,47 @@ const PALAVRAS_VAZIAS = new Set(['o', 'a', 'os', 'as', 'de', 'do', 'da', 'dos', 
 const palavrasDe = s => normal(s).replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(w => w && !PALAVRAS_VAZIAS.has(w) && !/^\d+$/.test(w));
 const ehCifra = m => m.tipo === 'texto' || /cifra/.test(normal(m.colecao + ' ' + m.nome));
 // Acha a partitura e a cifra de um louvor da lista: 1º pelo nome do arquivo, depois dentro dos PDFs (cabeçalho da página)
+// Nota de 0 a 3: quanto o título (e, na nuvem, o nome da pasta) bate com o louvor da lista
+function notaLouvor(e, titulo) {
+  const pal = palavrasDe(e.nome), reNum = e.num ? new RegExp('(^|[^0-9])' + e.num + '(?![0-9])') : null;
+  const t = normal(titulo), tw = palavrasDe(titulo);
+  const okNum = reNum ? reNum.test(t) : false;
+  const acertos = pal.filter(w => tw.includes(w) || t.includes(w)).length;
+  const okNome = pal.length ? acertos === pal.length : false;
+  if (okNum && (okNome || !pal.length)) return 3;
+  if (okNome && (!e.num || !/\d{2,}/.test(t))) return 2;
+  if (okNum && acertos >= Math.ceil(pal.length / 2)) return 1;
+  return 0;
+}
+// Melhor arquivo da nuvem para o louvor (cifra = true/false); considera o nome da pasta do hino
+const soLetras = s => ' ' + normal(s).replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+// cifra = o nome do arquivo diz "cifra" e não é parte de trompete (pasta "cifras" com partes de sopro não conta)
+const nvEhCifra = n => { const t = normal(n.n); return /cifra/.test(t) && !/trompete|trumpet|\btpt|\btrp/.test(t); };
+function nvMelhor(e, cifra) {
+  if (!NV.itens.length) return null;
+  const local = nvJaLocal(), frase = e.nome ? soLetras(e.nome) : null; let b = null, bn = 0;
+  for (const n of NV.itens) {
+    if (n.g === 'e' || local.has(n.i) || nvEhCifra(n) !== cifra) continue;
+    const tit = n.n.replace(/\.[^.]+$/, ''), pasta = (n.c || '').split('/').pop();
+    // pelo nome: o nome do louvor tem de aparecer inteiro, na ordem (evita "O grande amor do meu Senhor" para "Grande é o Senhor")
+    if (frase && frase.trim() && !soLetras(tit).includes(frase) && !soLetras(pasta).includes(frase) && !e.num) continue;
+    let v = Math.max(notaLouvor(e, tit), notaLouvor(e, pasta + ' ' + tit) - 0.5);
+    if (frase && soLetras(tit).includes(frase)) v += 0.3;
+    if (/trompete|trumpet|\bsib\b|\bbb\b/.test(normal(tit))) v += 0.2;   // prefere a parte de trompete
+    if (v > bn) { bn = v; b = n; }
+  }
+  return bn >= 1.5 ? b : null;
+}
 async function acharLouvor(e) {
   const pool = AC.meta.filter(m => grupoDe(m) !== 'estudo');
   const pal = palavrasDe(e.nome), reNum = e.num ? new RegExp('(^|[^0-9])' + e.num + '(?![0-9])') : null;
+  const frase = e.nome ? soLetras(e.nome) : null;
   const nota = m => {
     const t = normal(m.titulo), tw = palavrasDe(m.titulo);
     const okNum = reNum ? reNum.test(t) : false;
     const acertos = pal.filter(w => tw.includes(w) || t.includes(w)).length;
-    const okNome = pal.length ? acertos === pal.length : false;
+    // sem número: o nome tem de aparecer inteiro e na ordem no título
+    const okNome = pal.length ? acertos === pal.length && (okNum || !frase || soLetras(m.titulo).includes(frase)) : false;
     if (okNum && (okNome || !pal.length)) return 3;
     if (okNome && (!e.num || !/\d{2,}/.test(t))) return 2;
     if (okNum && acertos >= Math.ceil(pal.length / 2)) return 1;
@@ -4067,21 +4119,34 @@ async function acharLouvor(e) {
   };
   const partArq = melhorArq(pool.filter(m => !ehCifra(m) && m.tipo === 'pdf'));
   const cifArq = melhorArq(pool.filter(ehCifra));
-  const part = partArq ? { m: partArq, pag: null } : await dentro(pool.filter(m => !ehCifra(m) && m.tipo === 'pdf'));
-  const cif = cifArq ? { m: cifArq, pag: null } : await dentro(pool.filter(ehCifra));
+  // no aparelho pelo nome → na nuvem pelo nome → no aparelho dentro dos PDFs
+  const nvP = !partArq && nvMelhor(e, false), nvC = !cifArq && nvMelhor(e, true);
+  const part = partArq ? { m: partArq, pag: null } : nvP ? { nv: nvP, pag: null } : await dentro(pool.filter(m => !ehCifra(m) && m.tipo === 'pdf'));
+  const cif = cifArq ? { m: cifArq, pag: null } : nvC ? { nv: nvC, pag: null } : await dentro(pool.filter(ehCifra));
   return { part, cif };
+}
+// Item achado na nuvem: baixa agora (fica no aparelho para o culto). Sem login: devolve 'login'.
+async function trazerDaNuvem(x) {
+  if (!x || !x.nv) return x;
+  try { x.m = await nvBaixar(x.nv, $('ctStatus')); return x; }
+  catch (err) { return err.message === 'login' ? 'login' : null; }
 }
 async function ctMontarDaLista() {
   const txt = $('ctColarTxt').value, st = $('ctColarRes');
   const louvores = lerListaCulto(txt);
   if (!louvores.length) { st.innerHTML = '<p class="note">Não achei nenhum louvor no texto. Escreva um por linha (número e/ou nome).</p>'; return; }
-  if (!AC.meta.length) { st.innerHTML = '<p class="note">O acervo está vazio: sincronize as pastas em 📚 Acervo, no fim desta aba.</p>'; return; }
+  if (!AC.meta.length && !NV.itens.length) { st.innerHTML = '<p class="note">O acervo está vazio: entre com o Google (☁️ no topo da aba) ou sincronize as pastas em 📚 Acervo, no fim desta aba.</p>'; return; }
   if (CT.lista.itens.length && !confirm(`A lista de hoje já tem ${CT.lista.itens.length} itens. Trocar pela lista colada? (Cancelar = acrescentar no fim)`)) {} else CT.lista.itens = [];
-  const linhas = [];
+  const linhas = []; let precisaLogin = 0;
   for (let i = 0; i < louvores.length; i++) {
     const e = louvores[i];
     st.innerHTML = `<p class="note">Procurando ${i + 1} de ${louvores.length}: ${esc(e.orig)}…</p>`;
-    const { part, cif } = await acharLouvor(e);
+    let { part, cif } = await acharLouvor(e);
+    part = await trazerDaNuvem(part); cif = await trazerDaNuvem(cif);
+    if (part === 'login' || cif === 'login') {
+      precisaLogin++; if (part === 'login') part = null; if (cif === 'login') cif = null;
+      if (!part && !cif) { linhas.push(`<li class="nv">☁️ <b>${esc(e.orig)}</b>: está na nuvem — entre com o Google e monte de novo</li>`); continue; }
+    }
     const titulo = e.num && e.nome ? `${e.num} · ${e.nome}` : e.nome || `Nº ${e.num}`;
     if (part) { const it = await itemDoAcervo(part.m.id, part.pag, titulo); if (it) CT.lista.itens.push(it); }
     if (cif) { const it = await itemDoAcervo(cif.m.id, cif.pag, titulo + ' (cifra)'); if (it) CT.lista.itens.push(it); }
@@ -4091,7 +4156,123 @@ async function ctMontarDaLista() {
   }
   await ctSalvar(); ctDesenharLista();
   const faltam = linhas.filter(l => l.includes('class="er"')).length;
-  st.innerHTML = `<div class="ac-dentro-tit">${louvores.length - faltam} de ${louvores.length} louvores encontrados${faltam ? ` · ${faltam} sem cifra nem partitura` : ''}</div><ul class="ct-relat">${linhas.join('')}</ul>`;
+  st.innerHTML = `<div class="ac-dentro-tit">${louvores.length - faltam} de ${louvores.length} louvores encontrados${faltam ? ` · ${faltam} sem cifra nem partitura` : ''}</div><ul class="ct-relat">${linhas.join('')}</ul>` +
+    (precisaLogin ? `<p class="note">☁️ ${precisaLogin} louvor${precisaLogin > 1 ? 'es estão' : ' está'} na nuvem. <button class="b mini" data-nvlogin>Entrar com Google</button></p>` : '');
+  const bl = st.querySelector('[data-nvlogin]'); if (bl) bl.onclick = nvEntrar;
+}
+
+// ---------- Nuvem: todo o material do Google Drive, baixado sob demanda ----------
+// O índice (nome organizado → ID do arquivo no Drive) fica no Drive do Lucas, não no site público.
+// Login Google com permissão só de leitura; o arquivo baixado entra no acervo do aparelho (coleção "Nuvem - …")
+// e daí em diante abre sem internet. Itens da lista do culto vindos da nuvem ficam guardados para o culto.
+const NV_CLIENTE = '182136820429-kbp1crla8vqbdvl6gkohu3goi1vqmfqi.apps.googleusercontent.com';
+const NV_ESCOPO = 'https://www.googleapis.com/auth/drive.readonly';
+const NV_INDICE = 'Transpositor - indice da nuvem.json';
+const NV_COL = { p: 'Nuvem - Partituras', c: 'Nuvem - Coletâneas', e: 'Nuvem - Estudos' };
+const NV_GRUPO = { partitura: 'p', colet: 'c', estudo: 'e' };
+const NV = { itens: [], ts: 0 };
+function nvToken() {
+  try { const t = JSON.parse(localStorage.getItem('tp_gtok') || 'null'); return t && t.exp > Date.now() + 60000 ? t.tok : null; } catch (e) { return null; }
+}
+// Login por redirecionamento (funciona no app instalado no iPhone/iPad, onde janelas pop-up falham)
+function nvEntrar() {
+  const est = uid();
+  try { sessionStorage.setItem('tp_gest', est); localStorage.setItem('tp_aba', 'culto'); } catch (e) {}
+  location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
+    client_id: NV_CLIENTE, redirect_uri: location.origin + location.pathname, response_type: 'token',
+    scope: NV_ESCOPO, include_granted_scopes: 'true', state: est, prompt: 'select_account' });
+}
+// Volta do login: #access_token=…&expires_in=…&state=…
+function nvVoltaLogin() {
+  if (!/(access_token|error)=/.test(location.hash)) return false;
+  const p = new URLSearchParams(location.hash.slice(1));
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+  let est = null; try { est = sessionStorage.getItem('tp_gest'); sessionStorage.removeItem('tp_gest'); } catch (e) {}
+  if (p.get('error') || !p.get('access_token') || (est && p.get('state') !== est)) { setTimeout(() => toastB('Não deu para entrar no Google.'), 500); return false; }
+  try { localStorage.setItem('tp_gtok', JSON.stringify({ tok: p.get('access_token'), exp: Date.now() + (+p.get('expires_in') || 3600) * 1000 })); } catch (e) {}
+  return true;
+}
+function nvSair() { try { localStorage.removeItem('tp_gtok'); } catch (e) {} ctNuvemDesenhar(); }
+async function nvApi(url, buf) {
+  const tok = nvToken(); if (!tok) throw new Error('login');
+  const r = await fetch(url, { headers: { Authorization: 'Bearer ' + tok } });
+  if (r.status === 401) { try { localStorage.removeItem('tp_gtok'); } catch (e) {} throw new Error('login'); }
+  if (!r.ok) throw new Error('http ' + r.status);
+  return buf ? r.arrayBuffer() : r.json();
+}
+async function nvCarregarIndice() {
+  const v = await idbGet('meta', 'nuvem:indice').catch(() => null);
+  if (v && v.itens) { NV.itens = v.itens; NV.ts = v.ts || 0; }
+}
+async function nvAtualizarIndice() {
+  const q = new URLSearchParams({ q: `name='${NV_INDICE}' and trashed=false`, orderBy: 'modifiedTime desc', fields: 'files(id)', pageSize: '1' });
+  const l = await nvApi('https://www.googleapis.com/drive/v3/files?' + q);
+  if (!l.files || !l.files.length) throw new Error('sem índice');
+  const d = await nvApi(`https://www.googleapis.com/drive/v3/files/${l.files[0].id}?alt=media`);
+  NV.itens = (d.itens || []).filter(n => n.i && n.n); NV.ts = Date.now();
+  await idbPut('meta', { itens: NV.itens, ts: NV.ts }, 'nuvem:indice');
+}
+const nvTexto = n => n._t || (n._t = normal(n.n + ' ' + (n.c || '') + ' ' + (n.f || '')));
+const nvJaLocal = () => new Set(AC.meta.filter(m => m.nuvem).map(m => m.nuvem));
+// Busca no índice da nuvem pelo nome do arquivo e das pastas (número do hino também pelo nome da pasta)
+function nvAchar(q, grupo, lim) {
+  if (!NV.itens.length || !q) return [];
+  const local = nvJaLocal(), palavras = q.split(/\s+/), num = /^\d+$/.test(q);
+  const reNum = num ? new RegExp('(^|[^0-9])' + q + '(?![0-9])') : null;
+  const out = NV.itens.filter(n => !local.has(n.i) && (grupo === 'todos' || n.g === NV_GRUPO[grupo]) &&
+    (num ? reNum.test(normal(n.n)) || reNum.test(normal(n.c || '')) : palavras.every(p => nvTexto(n).includes(p))));
+  return out.sort((a, b) => a.n.localeCompare(b.n, 'pt', { numeric: true })).slice(0, lim || 40);
+}
+// Baixa um item da nuvem para o acervo do aparelho e devolve os metadados (já local: devolve direto)
+async function nvBaixar(n, st) {
+  const id = 'nv' + n.i;
+  let m = AC.meta.find(x => x.id === id); if (m) return m;
+  if (st) st.textContent = `☁️ Baixando "${n.n.replace(/\.[^.]+$/, '')}"…`;
+  try {
+    const buf = await nvApi(`https://www.googleapis.com/drive/v3/files/${n.i}?alt=media&supportsAllDrives=true`, true);
+    try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch (e) {}
+    const texto = EXT_TEXTO.test(n.n);
+    m = { id, colecao: NV_COL[n.g] || NV_COL.p, nome: n.n, titulo: n.n.replace(/\.[^.]+$/, ''), tipo: texto ? 'texto' : 'pdf', tam: buf.byteLength, mod: Date.now(), nuvem: n.i, fonte: n.f || '' };
+    await idbPut('arquivos', texto ? { texto: textoDe(buf) } : { dados: buf }, id);
+    await idbPut('acervo', m); AC.meta.push(m);
+    acDesenhar();
+    return m;
+  } finally { if (st) st.textContent = ''; }
+}
+// Versão com avisos para os botões: sem login, oferece entrar; erro do Drive, avisa
+async function nvBaixarUI(n) {
+  if (!nvToken()) { if (confirm('Esse arquivo está na nuvem (Google Drive). Entrar com sua conta Google para baixar?')) nvEntrar(); return null; }
+  try { return await nvBaixar(n, $('ctStatus')); }
+  catch (e) {
+    if (e.message === 'login') { if (confirm('O acesso ao Google expirou (dura 1 hora). Entrar de novo?')) nvEntrar(); }
+    else toastB(navigator.onLine === false ? 'Sem internet para baixar da nuvem.' : 'O Drive não liberou esse arquivo (' + e.message + ').');
+    return null;
+  }
+}
+function ctNuvemDesenhar() {
+  const box = $('ctNuvem'); if (!box) return;
+  const on = !!nvToken(), n = NV.itens.length;
+  box.innerHTML = `☁️ <span>${n ? `Nuvem: <b>${n.toLocaleString('pt-BR')}</b> arquivos do Drive${NV.ts ? ` · índice de ${haQuanto(NV.ts)}` : ''}` : 'Nuvem: entre com o Google para buscar todo o material do Drive'}</span>` +
+    (on ? `<button class="b b2 mini" id="nvAtu" title="Atualizar o índice">🔄</button><button class="b b2 mini" id="nvSair">Sair</button>`
+      : `<button class="b mini" id="nvEntrar">Entrar com Google</button>`);
+  if ($('nvEntrar')) $('nvEntrar').onclick = nvEntrar;
+  if ($('nvSair')) $('nvSair').onclick = nvSair;
+  if ($('nvAtu')) $('nvAtu').onclick = async () => {
+    $('ctStatus').textContent = '☁️ Atualizando o índice da nuvem…';
+    try { await nvAtualizarIndice(); toastB('Índice atualizado: ' + NV.itens.length + ' arquivos'); }
+    catch (e) { toastB(e.message === 'login' ? 'Entre no Google de novo.' : 'Não deu para atualizar (' + e.message + ').'); }
+    $('ctStatus').textContent = ''; ctNuvemDesenhar(); ctBuscar();
+  };
+}
+async function nvIniciar() {
+  const voltou = nvVoltaLogin();
+  await nvCarregarIndice();
+  // índice vazio ou com mais de 7 dias e login válido: atualiza sozinho
+  if (nvToken() && (voltou || !NV.itens.length || Date.now() - NV.ts > 7 * 86400000)) {
+    try { await nvAtualizarIndice(); if (voltou) toastB('☁️ Nuvem conectada: ' + NV.itens.length + ' arquivos'); }
+    catch (e) { if (voltou) toastB('Entrou, mas não achei o índice no Drive (' + e.message + ').'); }
+  }
+  ctNuvemDesenhar(); ctBuscar();
 }
 
 window.rpTestar = { paginarTexto, rpFontes, acSincronizar, grupoDe, lerListaCulto };   // para testes
@@ -4174,6 +4355,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     acCarregar();
   }
+  if ($('ctNuvem')) nvIniciar();
 });
 window.bibAnaliseLivre = analiseLivre; // para testes
 })();
