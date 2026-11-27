@@ -14,7 +14,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
 <title>Transpositor</title>
-<script>window.APP_VERSAO = '20261127165740';</script>
+<script>window.APP_VERSAO = '20261127172552';</script>
 <style>
 :root{--azul:#1f3a5f;--ouro:#f2c14e;--fundo:#f4f1ea;--card:#fff;--txt:#1d1d1f;--sub:#6b6b70;--borda:#e2ddd2;--verm:#c0392b;--b2:#e7e2d6;--b2txt:#1f3a5f;--campo:#fff;--pre:#faf8f3;--h2:#1f3a5f;
   --seta:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%236b6b70' stroke-width='2'/%3E%3C/svg%3E")}
@@ -220,6 +220,10 @@ body.leitor-aberto{overflow:hidden}
 .ct-relat li.nv{opacity:.85}
 .ct-filtros{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
 .ct-res .b.mini{min-width:44px}
+.ct-pag{border-top:1px solid var(--borda);padding:8px 0}
+.ct-mini{display:block;max-width:100%;margin:4px 0;border:1px solid var(--borda);border-radius:6px;background:#fff;cursor:pointer;min-height:120px}
+.ct-pag-bts{display:flex;gap:6px;flex-wrap:wrap}
+.ct-pag-bts .b{flex:1}
 .ciclo-dia{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:8px 0 2px;font-size:14px}.ciclo-dia label{margin-left:auto;font-size:12px;display:flex;align-items:center;gap:4px}.ciclo-dia select{width:auto;padding:4px 6px}
 #estEtapa summary{list-style:none;cursor:pointer}#estEtapa summary::-webkit-details-marker{display:none}
 .ct-sub{font-weight:700;font-size:13px;margin:10px 0 4px}.etapa-crit{list-style:none;padding:0;margin:0}.etapa-crit li{margin:2px 0}
@@ -3705,11 +3709,11 @@ async function acSincronizar(ev) {
     const id = ant ? ant.id : 'ac' + uid();
     const meta = { id, colecao: col, nome: e.nome, titulo: e.nome.replace(/^.*\//, '').replace(/\.[^.]+$/, ''), tipo: texto ? 'texto' : 'pdf', tam: e.tam || buf.byteLength, mod: e.mod };
     await idbPut('arquivos', texto ? { texto: textoDe(buf) } : { dados: buf }, id);
-    await idbDel('meta', 'txt:' + id); delete AC.txt[id];   // conteúdo mudou: refaz o índice de busca
+    await idbDel('meta', 'txt:' + id); await idbDel('meta', 'txt2:' + id); delete AC.txt[id]; delete AC.cru[id];   // conteúdo mudou: refaz o índice de busca
     await idbPut('acervo', meta);
     ant ? trocados++ : novos++;
   }
-  if (remover) for (const [nome, m] of existentes) if (!vistos.has(nome)) { await idbDel('acervo', m.id); await idbDel('arquivos', m.id); await idbDel('meta', 'txt:' + m.id); saiu++; }
+  if (remover) for (const [nome, m] of existentes) if (!vistos.has(nome)) { await idbDel('acervo', m.id); await idbDel('arquivos', m.id); await idbDel('meta', 'txt:' + m.id); await idbDel('meta', 'txt2:' + m.id); saiu++; }
   await idbPut('meta', Date.now(), 'sinc:' + col);
   st.textContent = `Pronto: "${col}" — ${novos} novos, ${trocados} atualizados, ${iguais} iguais${remover ? `, ${saiu} removidos` : ''}.`;
   $('acSinc').hidden = true;
@@ -3718,7 +3722,7 @@ async function acSincronizar(ev) {
 async function acExcluirColecao(col) {
   const ms = AC.meta.filter(m => m.colecao === col);
   if (!confirm(`Tirar a coleção "${col}" (${ms.length} arquivos) do app? Os arquivos no seu tablet não são mexidos.`)) return;
-  for (const m of ms) { await idbDel('acervo', m.id); await idbDel('arquivos', m.id); await idbDel('meta', 'txt:' + m.id); }
+  for (const m of ms) { await idbDel('acervo', m.id); await idbDel('arquivos', m.id); await idbDel('meta', 'txt:' + m.id); await idbDel('meta', 'txt2:' + m.id); }
   acCarregar();
 }
 function acBuscar() {
@@ -3767,45 +3771,77 @@ async function acParaRepertorio(id, bt, pag, titulo) {
 // ---------- Busca DENTRO dos PDFs (número ou nome do louvor) ----------
 // Na 1ª vez o app lê o texto de cada página e guarda (meta 'txt:<id>'); depois a busca é instantânea.
 // PDFs que são só imagem escaneada não têm texto: para esses, abra e escolha a página com 📑.
-AC.txt = {};
+AC.txt = {}; AC.cru = {};
+// minúsculas sem acento, mantendo o mesmo tamanho do texto original (a posição achada vale nos dois)
+const semAcento = s => s.replace(/[^\x00-\x7f]/g, c => { const d = c.normalize('NFD')[0]; return d.length === 1 ? d : c; }).toLowerCase();
+// guarda o texto original de cada página (meta 'txt2:<id>'), com acentos e pontuação, para mostrar os títulos como estão escritos
 async function acIndice(m) {
   if (AC.txt[m.id]) return AC.txt[m.id];
-  let idx = await idbGet('meta', 'txt:' + m.id);
-  if (!idx) {
+  let cru = await idbGet('meta', 'txt2:' + m.id);
+  if (!cru) {
     const a = await idbGet('arquivos', m.id); if (!a) return [];
-    if (m.tipo === 'texto') idx = [normal(a.texto)];
+    if (m.tipo === 'texto') cru = [a.texto.replace(/\s+/g, ' ')];
     else {
       prepararPdf();
-      const doc = await pdfjsLib.getDocument({ data: a.dados.slice(0) }).promise; idx = [];
+      const doc = await pdfjsLib.getDocument({ data: a.dados.slice(0) }).promise; cru = [];
       for (let n = 1; n <= doc.numPages; n++) {
         const tc = await (await doc.getPage(n)).getTextContent();
-        idx.push(normal(tc.items.map(i => i.str).join(' ').replace(/\s+/g, ' ')));
+        cru.push(tc.items.map(i => i.str).join(' ').replace(/\s+/g, ' '));
       }
       if (!m.paginas) { m.paginas = doc.numPages; idbPut('acervo', m); }
       doc.destroy();
     }
-    await idbPut('meta', idx, 'txt:' + m.id);
+    await idbPut('meta', cru, 'txt2:' + m.id);
+    idbDel('meta', 'txt:' + m.id).catch(() => {});   // formato antigo (só sem acento)
   }
-  return (AC.txt[m.id] = idx);
+  AC.cru[m.id] = cru;
+  return (AC.txt[m.id] = cru.map(t => semAcento(t)));
+}
+// Nome do hino a partir do cabeçalho na página ("656 - grande e o senhor (b) 7707" -> "656 · Grande e o senhor")
+function tituloDoCab(t, pos) {
+  const m = t.slice(Math.max(0, pos - 10), pos + 140).match(/(\d{1,4})\s*[-–]\s*([^()\d]{3,90}?)\s*(\(|\d{3,}|$)/);
+  if (!m) return null;
+  return `${m[1]} · ${comoTitulo(m[2])}`;
+}
+// "GRANDE É O SENHOR" -> "Grande é o Senhor" (texto todo em maiúsculas vira frase; nomes divinos com maiúscula)
+const NOMES_MAIUSC = /\b(senhor|deus|jesus|cristo|espírito|santo espírito|pai|filho|cordeiro|rei|sião|jerusalém|israel|maranata|emanuel|jeová|aleluia)\b/gi;
+function comoTitulo(s) {
+  s = s.trim().replace(/\s+/g, ' ').replace(/[\s,;:.–-]+$/, '');
+  if (s === s.toUpperCase()) s = s.toLowerCase().replace(NOMES_MAIUSC, w => w.charAt(0).toUpperCase() + w.slice(1));
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 // Procura o número ou as palavras no texto de cada página dos PDFs (lista = metadados do acervo a varrer)
 async function buscarNoTexto(q, lista, st) {
-  const num = /^\d+$/.test(q), re = num ? new RegExp('(^|[^0-9])' + q + '(?![0-9])') : null, palavras = q.split(/\s+/);
+  // pontuação digitada (ou não) não importa: "pai reunidos" acha "Pai, reunidos"
+  q = q.replace(/[^a-z0-9]+/g, ' ').trim();
+  const num = /^\d+$/.test(q), re = num ? new RegExp('(^|[^0-9])' + q + '(?![0-9])') : null, palavras = q.split(/\s+/).filter(Boolean);
+  const reFrase = palavras.length ? new RegExp(palavras.join('[^a-z0-9]+')) : null;
   const achados = []; let semTexto = 0, i = 0;
+  if (!palavras.length) return { achados, semTexto, num };
   for (const m of lista) {
     i++; if (!AC.txt[m.id] && st) st.textContent = `Lendo os PDFs (só na 1ª vez)… ${i} de ${lista.length}`;
     let idx; try { idx = await acIndice(m); } catch (e) { continue; }
     if (m.tipo === 'pdf' && idx.every(t => !t.trim())) { semTexto++; continue; }
     idx.forEach((t, k) => {
-      let pos;
+      let pos, fr = null;
       if (num) { const r = re.exec(t); pos = r ? r.index + r[1].length : -1; }
-      else pos = palavras.every(p => t.includes(p)) ? t.indexOf(palavras[0]) : -1;
-      if (pos >= 0) achados.push({ m, pag: k + 1, pos, trecho: t.slice(Math.max(0, pos - 25), pos + 70) });
+      else if (palavras.every(p => t.includes(p))) { fr = reFrase.exec(t); pos = fr ? fr.index : t.indexOf(palavras[0]); }
+      else pos = -1;
+      if (pos >= 0) {
+        // cabeçalho do hino ("656 - grande e o senhor"): número seguido de traço, ou o nome logo depois de "número -"
+        const cab = num ? /^\s*[-–]\s/.test(t.slice(pos + q.length, pos + q.length + 4)) : /\d{1,4}\s*[-–]\s*$/.test(t.slice(Math.max(0, pos - 10), pos));
+        // página de sumário/índice: muitos "número - nome" na mesma página
+        const indice = (t.match(/(^|\s)\d{1,4}\s*[-–]\s/g) || []).length > 14;
+        const inteira = num || !!fr;
+        const cru = (AC.cru[m.id] || [])[k] || t;   // texto original (mesmas posições), com acentos e pontuação
+        achados.push({ m, pag: k + 1, pos, cab, indice, inteira, trecho: cru.slice(Math.max(0, pos - 25), pos + 70),
+          titCab: cab ? tituloDoCab(cru, pos) : null, comoEscrito: fr ? cru.substr(fr.index, fr[0].length) : null });
+      }
     });
   }
   if (st) st.textContent = '';
-  // o número/título no começo da página (cabeçalho do louvor) vem primeiro
-  achados.sort((a, b) => (a.pos > 120) - (b.pos > 120) || a.pos - b.pos);
+  // cabeçalho do louvor primeiro; sumário por último; depois o que aparece mais no alto da página
+  achados.sort((a, b) => (b.inteira && b.cab && !b.indice) - (a.inteira && a.cab && !a.indice) || b.inteira - a.inteira || a.indice - b.indice || (a.pos > 120) - (b.pos > 120) || a.pos - b.pos);
   return { achados, semTexto, num };
 }
 async function acBuscarDentro() {
@@ -3884,7 +3920,7 @@ function ctBuscar() {
   const q0 = $('ctBusca').value.trim(), q = normal(q0);
   if (!AC.meta.length && !NV.itens.length) { box.innerHTML = '<p class="note">O acervo está vazio. Entre com o Google (☁️ acima) para buscar no Drive, ou em 📚 Acervo (no fim desta aba) sincronize as pastas do aparelho.</p>'; return; }
   if (!q && CT.grupo === 'todos') { box.innerHTML = ''; ctRes = []; return; }
-  const palavras = q ? q.split(/\s+/) : [];
+  const palavras = q ? q.split(/[^a-z0-9]+/).filter(Boolean) : [];
   const num = /^\d+$/.test(q), reNum = num ? new RegExp('(^|[^0-9])' + q + '(?![0-9])') : null;
   const achados = ctDoGrupo().filter(m => { const t = normal(m.nome); return num ? reNum.test(t) : palavras.every(p => t.includes(p)); })
     .sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt', { numeric: true })).slice(0, q ? 40 : 80);
@@ -3903,14 +3939,49 @@ async function ctBuscarDentro() {
   const { achados, semTexto, num } = await buscarNoTexto(q, ctDoGrupo().filter(m => m.tipo === 'pdf' || m.tipo === 'texto'), $('ctStatus'));
   const base = ctRes.filter(r => r.m && !r.pag), ja = new Set(base.map(r => r.m.id));
   const mais = achados.filter(r => !(ja.has(r.m.id) && r.pag === 1)).slice(0, 30)
-    .map(r => ({ m: r.m, pag: r.pag, titulo: num ? `Nº ${q0} · ${r.m.titulo}` : q0.replace(/^./, c => c.toUpperCase()), trecho: r.trecho }));
+    .map(r => ({ m: r.m, pag: r.pag, titulo: r.titCab || (num ? `Nº ${q0} · ${r.m.titulo}` : r.comoEscrito ? comoTitulo(r.comoEscrito) : q0.replace(/^./, c => c.toUpperCase())), trecho: r.trecho, indice: r.indice }));
   ctRes = base.concat(mais);
   box.innerHTML = base.map((r, k) => ctLinha(r.m, null, r.m.colecao, k)).join('') +
     `<div class="ac-dentro-tit">Dentro dos PDFs: ${achados.length ? `${achados.length} página${achados.length > 1 ? 's' : ''}` : 'nada encontrado'}${achados.length > 30 ? ' (mostrando 30)' : ''}</div>` +
-    mais.map((r, j) => ctLinha(r.m, r.pag, '…' + r.trecho + '…', base.length + j)).join('') +
+    mais.map((r, j) => ctLinhaPag(r, base.length + j)).join('') +
     (semTexto ? `<p class="note">${semTexto} PDF${semTexto > 1 ? 's são imagens escaneadas' : ' é imagem escaneada'}: neles a busca só acha pelo nome do arquivo.</p>` : '') +
     (CT.grupo === 'todos' || CT.grupo === 'colet' ? ctOfertaColet() : '');
-  ctLigar(box); ctLigarOferta(box);
+  ctLigar(box); ctLigarOferta(box); ctMiniaturas(box);
+}
+// Resultado "dentro do PDF": mostra a página (miniatura) para conferir antes de pôr no repertório
+function ctLinhaPag(r, k) {
+  return `<div class="ct-pag"><button class="ac-abrir" data-k="${k}"><b>${esc(r.titulo)}</b><small>${esc(r.m.titulo)} · pág. ${r.pag} do PDF${r.indice ? ' · sumário' : ''}</small></button>
+    <canvas class="ct-mini" data-mini="${k}" data-k="${k}"></canvas>
+    <div class="ct-pag-bts"><button class="b mini" data-tocar="${k}">▶ Abrir</button><button class="b mini" data-lista="${k}">${RP.atual ? '+ Repertório (só esta página)' : '+ Lista (só esta página)'}</button></div></div>`;
+}
+// Desenha as miniaturas quando aparecem na tela (um PDF aberto de cada vez fica guardado)
+const MINI = { doc: null, id: null };
+async function docDoAcervo(id) {
+  if (MINI.id === id && MINI.doc) return MINI.doc;
+  const a = await idbGet('arquivos', id); if (!a || !a.dados) return null;
+  prepararPdf();
+  if (MINI.doc) { try { MINI.doc.destroy(); } catch (e) {} }
+  MINI.doc = await pdfjsLib.getDocument({ data: a.dados.slice(0) }).promise; MINI.id = id;
+  return MINI.doc;
+}
+let miniFila = Promise.resolve();
+function ctMiniaturas(box) {
+  const cs = box.querySelectorAll('canvas[data-mini]'); if (!cs.length) return;
+  const desenhar = c => { miniFila = miniFila.then(async () => {
+    const r = ctRes[+c.dataset.mini]; if (!r || !r.m || c.dataset.ok) return;
+    try {
+      const doc = await docDoAcervo(r.m.id); if (!doc) return;
+      const pg = await doc.getPage(r.pag), v1 = pg.getViewport({ scale: 1 });
+      const W = Math.min(c.parentNode.clientWidth || 360, 520), dpr = Math.min(2, window.devicePixelRatio || 1);
+      const vp = pg.getViewport({ scale: W / v1.width * dpr });
+      c.width = vp.width; c.height = vp.height; c.style.width = W + 'px';
+      await pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+      c.dataset.ok = 1;
+    } catch (e) {}
+  }); };
+  if (!('IntersectionObserver' in window)) { cs.forEach(desenhar); return; }
+  const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { io.unobserve(e.target); desenhar(e.target); } }), { rootMargin: '300px' });
+  cs.forEach(c => io.observe(c));
 }
 // Coletâneas que ainda estão só na nuvem: a busca por número/nome dentro delas precisa delas no aparelho
 const nvColetFaltando = () => { const l = nvJaLocal(); return NV.itens.filter(n => n.g === 'c' && !l.has(n.i)); };
@@ -4244,7 +4315,7 @@ const nvJaLocal = () => new Set(AC.meta.filter(m => m.nuvem).map(m => m.nuvem));
 // Busca no índice da nuvem pelo nome do arquivo e das pastas (número do hino também pelo nome da pasta)
 function nvAchar(q, grupo, lim) {
   if (!NV.itens.length || (!q && grupo === 'todos')) return [];
-  const local = nvJaLocal(), palavras = q ? q.split(/\s+/) : [], num = /^\d+$/.test(q);
+  const local = nvJaLocal(), palavras = q ? q.split(/[^a-z0-9]+/).filter(Boolean) : [], num = /^\d+$/.test(q);
   const reNum = num ? new RegExp('(^|[^0-9])' + q + '(?![0-9])') : null;
   const out = NV.itens.filter(n => !local.has(n.i) && (grupo === 'todos' || n.g === NV_GRUPO[grupo]) &&
     (num ? reNum.test(normal(n.n)) || reNum.test(normal(n.c || '')) : palavras.every(p => nvTexto(n).includes(p))));
